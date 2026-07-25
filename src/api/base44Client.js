@@ -153,6 +153,7 @@ const auth = {
       email,
       password,
       options: {
+        emailRedirectTo: `${window.location.origin}/welcome`,
         data: {
           full_name: extra.full_name || '',
           role: extra.role || 'Employee',
