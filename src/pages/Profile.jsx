@@ -5,7 +5,6 @@ import { Plus, Eye, EyeOff } from 'lucide-react';
 import SetGoalCard from '@/components/goals/SetGoalCard';
 import GoalCard from '@/components/goals/GoalCard';
 import GoalFormDialog from '@/components/goals/GoalFormDialog';
-import CareerDetails from '@/components/CareerDetails';
 import AppHeader from '@/components/AppHeader';
 
 export default function Profile() {
@@ -144,9 +143,33 @@ export default function Profile() {
               )}
             </div>
           </div>
-        </section>
 
-        <CareerDetails currentUser={currentUser} onSaved={refresh} />
+          {(currentUser?.department || currentUser?.job_title || currentUser?.years_of_experience != null) && (
+            <div className="mt-4 pt-4 border-t border-stone-100 grid grid-cols-2 gap-3 text-sm">
+              {currentUser?.job_title && (
+                <div>
+                  <div className="text-xs text-stone-400 font-medium">Job Title</div>
+                  <div className="text-stone-700">{currentUser.job_title}</div>
+                </div>
+              )}
+              {currentUser?.department && (
+                <div>
+                  <div className="text-xs text-stone-400 font-medium">Department</div>
+                  <div className="text-stone-700">{currentUser.department}</div>
+                </div>
+              )}
+              {currentUser?.years_of_experience != null && (
+                <div>
+                  <div className="text-xs text-stone-400 font-medium">Experience</div>
+                  <div className="text-stone-700">
+                    {currentUser.years_of_experience}{' '}
+                    {Number(currentUser.years_of_experience) === 1 ? 'year' : 'years'}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </section>
 
         {activeGoals.length === 0 ? (
           <SetGoalCard currentUser={currentUser} onComplete={refresh} />

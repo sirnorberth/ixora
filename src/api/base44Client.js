@@ -1,163 +1,249 @@
 // src/api/base44Client.js
-// Local shim replacing the @base44/sdk client.
-// Same shape as the real client, so components importing { base44 } work unchanged.
-// Uses localStorage as a stand-in backend — swap internals for a real backend later.
+// Supabase-powered client for Ixora.
+// Same export shape as the original Base44 SDK — base44.entities.X and
+// base44.auth — so every component in the app works unchanged.
+
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+// ---- Entity name -> table name mapping ----
+const TABLE_MAP = {
+  User: 'profiles',
+  Project: 'projects',
+  Goal: 'goals',
+  Challenge: 'challenges',
+  Bottleneck: 'bottlenecks',
+  Application: 'applications',
+  Milestone: 'milestones',
+  MentorOffer: 'mentor_offers',
+  MentorMatch: 'mentor_matches',
+  Notification: 'notifications',
+  ResistanceLog: 'resistance_logs',
+};
+
+function tableFor(entityName) {
+  const t = TABLE_MAP[entityName];
+  if (!t) throw new Error(`[client] No table mapping for entity "${entityName}"`);
+  return t;
+}
+
+// Apply Base44-style sort string ("-created_date" = descending) to a query
+function applySort(query, sort) {
+  if (typeof sort === 'string' && sort.length > 0) {
+    const desc = sort.startsWith('-');
+    const field = desc ? sort.slice(1) : sort;
+    return query.order(field, { ascending: !desc });
+  }
+  return query;
+}
+
+function throwIf(error) {
+  if (error) {
+    const e = new Error(error.message);
+    e.status = error.code === 'PGRST116' ? 404 : (error.status || 400);
+    e.original = error;
+    throw e;
+  }
+}
 
 function makeEntity(name) {
-  const key = `db_${name}`;
-  const read = () => JSON.parse(localStorage.getItem(key) || '[]');
-  const write = (rows) => localStorage.setItem(key, JSON.stringify(rows));
+  const table = tableFor(name);
 
   return {
     async create(values) {
-      const rows = read();
-      const record = {
-        id: crypto.randomUUID(),
-        created_date: new Date().toISOString(),
-        updated_date: new Date().toISOString(),
-        ...values,
-      };
-      rows.push(record);
-      write(rows);
-      return record;
+      const { data, error } = await supabase
+        .from(table)
+        .insert(values)
+        .select()
+        .single();
+      throwIf(error);
+      return data;
     },
 
     async list(sort, limit) {
-      let rows = read();
-      if (typeof sort === 'string' && sort.length > 0) {
-        const desc = sort.startsWith('-');
-        const field = desc ? sort.slice(1) : sort;
-        rows = [...rows].sort((a, b) => {
-          if (a[field] < b[field]) return desc ? 1 : -1;
-          if (a[field] > b[field]) return desc ? -1 : 1;
-          return 0;
-        });
-      }
-      if (typeof limit === 'number') rows = rows.slice(0, limit);
-      return rows;
+      let q = supabase.from(table).select('*');
+      q = applySort(q, sort);
+      if (typeof limit === 'number') q = q.limit(limit);
+      const { data, error } = await q;
+      throwIf(error);
+      return data || [];
     },
 
-    async filter(query = {}, sort, limit) {
-      let rows = (await this.list(sort)).filter((r) =>
-        Object.entries(query).every(([k, v]) => r[k] === v)
-      );
-      if (typeof limit === 'number') rows = rows.slice(0, limit);
-      return rows;
+    async filter(queryObj = {}, sort, limit) {
+      let q = supabase.from(table).select('*');
+      for (const [k, v] of Object.entries(queryObj)) {
+        q = q.eq(k, v);
+      }
+      q = applySort(q, sort);
+      if (typeof limit === 'number') q = q.limit(limit);
+      const { data, error } = await q;
+      throwIf(error);
+      return data || [];
     },
 
     async get(id) {
-      const record = read().find((r) => r.id === id);
-      if (!record) {
-        const e = new Error(`${name} not found`);
-        e.status = 404;
-        throw e;
-      }
-      return record;
+      const { data, error } = await supabase
+        .from(table)
+        .select('*')
+        .eq('id', id)
+        .single();
+      throwIf(error);
+      return data;
     },
 
     async update(id, values) {
-      const rows = read().map((r) =>
-        r.id === id ? { ...r, ...values, updated_date: new Date().toISOString() } : r
-      );
-      write(rows);
-      return rows.find((r) => r.id === id);
+      const { data, error } = await supabase
+        .from(table)
+        .update({ ...values, updated_date: new Date().toISOString() })
+        .eq('id', id)
+        .select()
+        .single();
+      throwIf(error);
+      return data;
     },
 
     async delete(id) {
-      write(read().filter((r) => r.id !== id));
+      const { error } = await supabase.from(table).delete().eq('id', id);
+      throwIf(error);
       return { success: true };
     },
   };
 }
 
+// ---- Auth: Supabase Auth + profiles merge ----
+// me() returns the auth user MERGED with their profiles row, so components
+// see user.full_name, user.role, user.department, user.job_title, etc.
+
 const auth = {
   async me() {
-    const u = JSON.parse(localStorage.getItem('auth_user') || 'null');
-    if (!u) {
+    const { data: { user }, error } = await supabase.auth.getUser();
+    if (error || !user) {
       const e = new Error('Not authenticated');
       e.status = 401;
       throw e;
     }
-    return u;
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', user.id)
+      .single();
+    return { ...user, ...(profile || {}), id: user.id, email: user.email };
   },
 
+  async loginViaEmailPassword(email, password) {
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    throwIf(error);
+    return auth.me();
+  },
+
+  // alias kept for any code calling login() directly
   async login(email, password) {
-    const users = JSON.parse(localStorage.getItem('db_users') || '[]');
-    const u = users.find((x) => x.email === email && x.password === password);
-    if (!u) {
-      const e = new Error('Invalid email or password');
-      e.status = 401;
-      throw e;
+    return auth.loginViaEmailPassword(email, password);
+  },
+
+  // Registration: ALL profile fields travel as signup metadata; the
+  // database trigger (handle_new_user) copies them into public.profiles.
+  // This works even when email confirmation is ON (no session yet).
+  async registerViaEmailPassword(email, password, extra = {}) {
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          full_name: extra.full_name || '',
+          role: extra.role || 'Employee',
+          department: extra.department || null,
+          job_title: extra.job_title || null,
+          years_of_experience:
+            extra.years_of_experience != null && extra.years_of_experience !== ''
+              ? String(extra.years_of_experience)
+              : '',
+        },
+      },
+    });
+    throwIf(error);
+    if (!data.session) {
+      // Email confirmation is ON — user must click the emailed link.
+      return { ...data.user, confirmation_required: true };
     }
-    localStorage.setItem('auth_user', JSON.stringify(u));
-    return u;
+    return auth.me();
+  },
+
+  async signupViaEmailPassword(email, password, extra = {}) {
+    return auth.registerViaEmailPassword(email, password, extra);
   },
 
   async register(values) {
-    const users = JSON.parse(localStorage.getItem('db_users') || '[]');
-    if (users.some((x) => x.email === values.email)) {
-      const e = new Error('Email already registered');
-      e.status = 409;
-      throw e;
-    }
-    const u = {
-      id: crypto.randomUUID(),
-      created_date: new Date().toISOString(),
-      role: 'user',
-      ...values,
-    };
-    users.push(u);
-    localStorage.setItem('db_users', JSON.stringify(users));
-    localStorage.setItem('auth_user', JSON.stringify(u));
-    return u;
+    const { email, password, ...extra } = values;
+    return auth.registerViaEmailPassword(email, password, extra);
   },
 
   async updateMe(values) {
-    const current = await auth.me();
-    const users = JSON.parse(localStorage.getItem('db_users') || '[]');
-    const updated = { ...current, ...values };
-    localStorage.setItem(
-      'db_users',
-      JSON.stringify(users.map((x) => (x.id === current.id ? updated : x)))
-    );
-    localStorage.setItem('auth_user', JSON.stringify(updated));
-    return updated;
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      const e = new Error('Not authenticated');
+      e.status = 401;
+      throw e;
+    }
+    const { error } = await supabase
+      .from('profiles')
+      .update({ ...values, updated_date: new Date().toISOString() })
+      .eq('id', user.id);
+    throwIf(error);
+    return auth.me();
   },
 
-  logout() {
-    localStorage.removeItem('auth_user');
+  // Resends the signup confirmation email
+  async resendOtp(email) {
+    const { error } = await supabase.auth.resend({ type: 'signup', email });
+    throwIf(error);
+    return { success: true };
+  },
+
+  async sendPasswordResetEmail(email) {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+    throwIf(error);
+    return { success: true };
+  },
+
+  async resetPassword(_token, newPassword) {
+    // Supabase puts the user in a recovery session via the email link,
+    // so we just set the new password on the current session.
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    throwIf(error);
+    return { success: true };
+  },
+
+  async loginWithProvider(provider, redirectPath = '/') {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: { redirectTo: window.location.origin + redirectPath },
+    });
+    throwIf(error);
+    // Browser redirects away; nothing to return.
+  },
+
+  async loginViaGoogle() {
+    return auth.loginWithProvider('google', '/');
+  },
+
+  setToken() {
+    // Supabase manages its own session storage — nothing to do.
+  },
+
+  async logout() {
+    await supabase.auth.signOut();
     window.location.href = '/login';
   },
 
   redirectToLogin() {
     window.location.href = '/login';
-  },
-
-  // --- SDK-style aliases the Base44 pages actually call ---
-  async loginViaEmailPassword(email, password) {
-    return auth.login(email, password);
-  },
-
-  async registerViaEmailPassword(email, password, extra = {}) {
-    return auth.register({ email, password, ...extra });
-  },
-
-  async signupViaEmailPassword(email, password, extra = {}) {
-    return auth.register({ email, password, ...extra });
-  },
-
-  async sendPasswordResetEmail(email) {
-    console.warn(`[shim] Password reset requested for ${email} — no email actually sent.`);
-    return { success: true };
-  },
-
-  async resetPassword(token, newPassword) {
-    console.warn('[shim] resetPassword called — not implemented in local shim.');
-    return { success: true };
-  },
-
-  async loginViaGoogle() {
-    throw new Error('Google login is not available in the local build — use email and password.');
   },
 };
 
@@ -167,16 +253,3 @@ export const base44 = {
   }),
   auth,
 };
-
-// --- DEV ONLY: auto-login so we can explore the app without auth ---
-const DEV_AUTOLOGIN = true;
-
-if (DEV_AUTOLOGIN && !localStorage.getItem('auth_user')) {
-  localStorage.setItem('auth_user', JSON.stringify({
-    id: 'dev-user-1',
-    email: 'dev@ixora.test',
-    full_name: 'Dev User',
-    role: 'admin',
-    created_date: new Date().toISOString()
-  }));
-}

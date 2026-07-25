@@ -4,20 +4,42 @@ import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { UserPlus, Mail, Lock, Loader2 } from "lucide-react";
-import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "@/components/ui/select";
+import { UserPlus, Mail, Lock, User, Briefcase, Loader2 } from "lucide-react";
 import AuthLayout from "@/components/AuthLayout";
 import GoogleIcon from "@/components/GoogleIcon";
 import { toast } from "@/components/ui/use-toast";
 
+const ROLES = ["Employee", "Manager", "Director"];
+const DEPARTMENTS = [
+  "Production/Manufacturing",
+  "HR/Admin",
+  "Procurement",
+  "Supply Chain",
+  "Marketing",
+  "Regulatory",
+  "R & D",
+  "Finance",
+];
+
 export default function Register() {
+  const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [role, setRole] = useState("");
+  const [department, setDepartment] = useState("");
+  const [jobTitle, setJobTitle] = useState("");
+  const [yearsOfExperience, setYearsOfExperience] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [showOtp, setShowOtp] = useState(false);
-  const [otpCode, setOtpCode] = useState("");
+  const [awaitingConfirmation, setAwaitingConfirmation] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -26,28 +48,34 @@ export default function Register() {
       setError("Passwords do not match");
       return;
     }
+    if (!role) {
+      setError("Please select your role");
+      return;
+    }
+    if (!department) {
+      setError("Please select your department");
+      return;
+    }
     setLoading(true);
     try {
-      await base44.auth.register({ email, password });
-      setShowOtp(true);
+      const result = await base44.auth.register({
+        email,
+        password,
+        full_name: fullName,
+        role,
+        department,
+        job_title: jobTitle,
+        years_of_experience:
+          yearsOfExperience === "" ? null : Number(yearsOfExperience),
+      });
+      if (result?.confirmation_required) {
+        setAwaitingConfirmation(true);
+      } else {
+        // Email confirmation is disabled — user is logged in already
+        window.location.href = "/";
+      }
     } catch (err) {
       setError(err.message || "Registration failed");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleVerify = async () => {
-    setError("");
-    setLoading(true);
-    try {
-      const result = await base44.auth.verifyOtp({ email, otpCode });
-      if (result?.access_token) {
-        base44.auth.setToken(result.access_token);
-      }
-      window.location.href = "/";
-    } catch (err) {
-      setError(err.message || "Invalid verification code");
     } finally {
       setLoading(false);
     }
@@ -58,11 +86,11 @@ export default function Register() {
     try {
       await base44.auth.resendOtp(email);
       toast({
-        title: "Code sent",
-        description: "Check your email for the new code.",
+        title: "Email sent",
+        description: "Check your inbox for the confirmation link.",
       });
     } catch (err) {
-      setError(err.message || "Failed to resend code");
+      setError(err.message || "Failed to resend email");
     }
   };
 
@@ -70,53 +98,36 @@ export default function Register() {
     base44.auth.loginWithProvider("google", "/");
   };
 
-  if (showOtp) {
+  if (awaitingConfirmation) {
     return (
       <AuthLayout
         icon={Mail}
-        title="Verify your email"
-        subtitle={`We sent a code to ${email}`}
+        title="Confirm your email"
+        subtitle={`We sent a confirmation link to ${email}`}
+        footer={
+          <>
+            Already confirmed?{" "}
+            <Link to="/login" className="text-primary font-medium hover:underline">
+              Log in
+            </Link>
+          </>
+        }
       >
         {error && (
           <div className="mb-4 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
             {error}
           </div>
         )}
-        <div className="flex justify-center mb-6">
-          <InputOTP
-            maxLength={6}
-            value={otpCode}
-            onChange={setOtpCode}
-            autoFocus
-            autoComplete="one-time-code"
+        <p className="text-sm text-muted-foreground text-center mb-6">
+          Click the link in the email to activate your account, then come back
+          and log in.
+        </p>
+        <p className="text-center text-sm text-muted-foreground">
+          Didn't receive the email?{" "}
+          <button
+            onClick={handleResend}
+            className="text-primary font-medium hover:underline"
           >
-            <InputOTPGroup>
-              <InputOTPSlot index={0} />
-              <InputOTPSlot index={1} />
-              <InputOTPSlot index={2} />
-              <InputOTPSlot index={3} />
-              <InputOTPSlot index={4} />
-              <InputOTPSlot index={5} />
-            </InputOTPGroup>
-          </InputOTP>
-        </div>
-        <Button
-          className="w-full h-12 font-medium"
-          onClick={handleVerify}
-          disabled={loading || otpCode.length < 6}
-        >
-          {loading ? (
-            <>
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              Verifying...
-            </>
-          ) : (
-            "Verify"
-          )}
-        </Button>
-        <p className="text-center text-sm text-muted-foreground mt-4">
-          Didn't receive the code?{" "}
-          <button onClick={handleResend} className="text-primary font-medium hover:underline">
             Resend
           </button>
         </p>
@@ -164,6 +175,24 @@ export default function Register() {
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-2">
+          <Label htmlFor="fullName">Full Name</Label>
+          <div className="relative">
+            <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" aria-hidden="true" />
+            <Input
+              id="fullName"
+              type="text"
+              autoComplete="name"
+              autoFocus
+              placeholder="Your full name"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              className="pl-10 h-12"
+              required
+            />
+          </div>
+        </div>
+
+        <div className="space-y-2">
           <Label htmlFor="email">Email</Label>
           <div className="relative">
             <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" aria-hidden="true" />
@@ -171,7 +200,6 @@ export default function Register() {
               id="email"
               type="email"
               autoComplete="email"
-              autoFocus
               placeholder="you@example.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -180,6 +208,73 @@ export default function Register() {
             />
           </div>
         </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-2">
+            <Label>Role</Label>
+            <Select value={role} onValueChange={setRole}>
+              <SelectTrigger className="h-12">
+                <SelectValue placeholder="Select role" />
+              </SelectTrigger>
+              <SelectContent>
+                {ROLES.map((r) => (
+                  <SelectItem key={r} value={r}>
+                    {r}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>Department</Label>
+            <Select value={department} onValueChange={setDepartment}>
+              <SelectTrigger className="h-12">
+                <SelectValue placeholder="Select department" />
+              </SelectTrigger>
+              <SelectContent>
+                {DEPARTMENTS.map((d) => (
+                  <SelectItem key={d} value={d}>
+                    {d}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="jobTitle">Job Title</Label>
+          <div className="relative">
+            <Briefcase className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" aria-hidden="true" />
+            <Input
+              id="jobTitle"
+              type="text"
+              autoComplete="organization-title"
+              placeholder="e.g. Production Supervisor"
+              value={jobTitle}
+              onChange={(e) => setJobTitle(e.target.value)}
+              className="pl-10 h-12"
+              required
+            />
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="experience">Years of Experience</Label>
+          <Input
+            id="experience"
+            type="number"
+            min="0"
+            max="60"
+            step="1"
+            placeholder="e.g. 5"
+            value={yearsOfExperience}
+            onChange={(e) => setYearsOfExperience(e.target.value)}
+            className="h-12"
+            required
+          />
+        </div>
+
         <div className="space-y-2">
           <Label htmlFor="password">Password</Label>
           <div className="relative">
