@@ -6,12 +6,37 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { CheckCircle2, Target, Calendar } from 'lucide-react';
 import { SKILL_TAGS } from '@/lib/constants';
-import { addMonths, format } from 'date-fns';
+import { addMonths, format, differenceInMonths, parseISO } from 'date-fns';
 import { fmtDate } from '@/lib/dateUtils';
+
+// value = months added to today for the target date
+const TIMELINES = [
+  { value: 3, label: '1–3' },
+  { value: 6, label: '6' },
+  { value: 12, label: '12' },
+  { value: 24, label: '24' },
+];
+
+// Which button best represents an existing target date
+function closestTimeline(targetDate) {
+  if (!targetDate) return 6;
+  try {
+    const months = differenceInMonths(parseISO(targetDate), new Date());
+    return TIMELINES.reduce(
+      (best, t) => (Math.abs(t.value - months) < Math.abs(best - months) ? t.value : best),
+      TIMELINES[0].value
+    );
+  } catch {
+    return 6;
+  }
+}
 
 export default function GoalFormDialog({ open, onOpenChange, currentUser, goal, onSubmit }) {
   const isEdit = !!goal;
   const [form, setForm] = useState({ goal_text: '', goal_type: '', skill_tags: [], timeline: 6 });
+  // Tracks whether the user actually picked a timeline in this session.
+  // If they didn't, editing a goal leaves its target date untouched.
+  const [timelineTouched, setTimelineTouched] = useState(false);
   const [done, setDone] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
@@ -21,18 +46,29 @@ export default function GoalFormDialog({ open, onOpenChange, currentUser, goal, 
         goal_text: goal?.goal_text || '',
         goal_type: goal?.goal_type || '',
         skill_tags: goal?.matching_skill_tags || [],
-        timeline: 6,
+        timeline: goal?.target_date ? closestTimeline(goal.target_date) : 6,
       });
+      setTimelineTouched(false);
       setDone(false);
     }
   }, [open, goal]);
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  const pickTimeline = (v) => {
+    setTimelineTouched(true);
+    set('timeline', v);
+  };
   const toggleTag = (t) =>
     setForm((f) => {
       const has = f.skill_tags.includes(t);
       return { ...f, skill_tags: has ? f.skill_tags.filter((x) => x !== t) : [...f.skill_tags, t] };
     });
+
+  // Keep the original date when editing unless the user chose a new timeline
+  const keepExistingDate = isEdit && !timelineTouched && !!goal?.target_date;
+  const resolvedTargetDate = keepExistingDate
+    ? goal.target_date
+    : format(addMonths(new Date(), Number(form.timeline)), 'yyyy-MM-dd');
 
   const submit = async () => {
     if (submitting || !form.goal_text.trim()) return;
@@ -42,7 +78,7 @@ export default function GoalFormDialog({ open, onOpenChange, currentUser, goal, 
         goal_text: form.goal_text.trim(),
         goal_type: form.goal_type.trim() || undefined,
         matching_skill_tags: form.skill_tags,
-        target_date: format(addMonths(new Date(), Number(form.timeline)), 'yyyy-MM-dd'),
+        target_date: resolvedTargetDate,
       };
       if (!isEdit) {
         values.user = currentUser?.id;
@@ -129,23 +165,28 @@ export default function GoalFormDialog({ open, onOpenChange, currentUser, goal, 
               {isEdit && goal?.target_date && (
                 <p className="text-[11px] text-stone-400">Current target: {fmtDate(goal.target_date)}</p>
               )}
-              <div className="grid grid-cols-3 gap-2.5">
-                {[6, 12, 24].map((m) => {
-                  const sel = Number(form.timeline) === m;
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                {TIMELINES.map((t) => {
+                  const sel = Number(form.timeline) === t.value;
                   return (
                     <button
                       type="button"
-                      key={m}
-                      onClick={() => set('timeline', m)}
+                      key={t.value}
+                      onClick={() => pickTimeline(t.value)}
                       className={`p-3 rounded-2xl border-2 transition text-center ${sel ? 'border-[#EA580C] bg-orange-50' : 'border-stone-200 bg-white hover:border-orange-200'}`}
                     >
                       <Calendar className="w-4 h-4 text-[#EA580C] mx-auto mb-0.5" />
-                      <div className="text-lg font-bold text-stone-800">{m}</div>
+                      <div className="text-lg font-bold text-stone-800 whitespace-nowrap">{t.label}</div>
                       <div className="text-[11px] text-stone-500">months</div>
                     </button>
                   );
                 })}
               </div>
+              <p className="text-[11px] text-stone-400">
+                {keepExistingDate
+                  ? `Keeping the current target date (${fmtDate(goal.target_date)}). Tap a timeline to change it.`
+                  : `New target date: ${fmtDate(resolvedTargetDate)}`}
+              </p>
             </div>
             <div className="flex justify-end pt-1">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)} className="mr-2">
