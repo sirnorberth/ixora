@@ -1,7 +1,8 @@
+// ProjectDetail.jsx
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { base44 } from '@/api/base44Client';
-import { Calendar, User2, TrendingUp, Pencil, CheckCircle2, XCircle, ClipboardCheck } from 'lucide-react';
+import { Calendar, User2, TrendingUp, Pencil, CheckCircle2, XCircle, ClipboardCheck, AlertOctagon } from 'lucide-react';
 import HealthBadge from '@/components/projects/HealthBadge';
 import PetalStrip from '@/components/projects/PetalStrip';
 import PhaseRoadmap from '@/components/projects/PhaseRoadmap';
@@ -13,7 +14,13 @@ import ApprovalBadge from '@/components/projects/ApprovalBadge';
 import ProjectStatusBadge from '@/components/projects/ProjectStatusBadge';
 import ProjectReviewDialog from '@/components/projects/ProjectReviewDialog';
 import AppHeader from '@/components/AppHeader';
-import { notifyMilestoneAdded, notifyMilestoneStatus, notifyBottleneckFlagged, notifyProjectDone } from '@/lib/notify';
+import {
+  notifyMilestoneAdded,
+  notifyMilestoneStatus,
+  notifyBottleneckFlagged,
+  notifyBottleneckCleared,
+  notifyProjectDone,
+} from '@/lib/notify';
 import { fmtDate, daysSince, todayISODate } from '@/lib/dateUtils';
 
 export default function ProjectDetail() {
@@ -78,7 +85,14 @@ export default function ProjectDetail() {
   }
 
   const canEditProject = !!currentUser;
-  const canEditMilestones = currentUser && (currentUser.role === 'Sponsor' || (currentUser.role === 'Project Lead' && project.project_lead === currentUser.id));
+
+  // Roles are Employee / Manager / Director.
+  const canEditMilestones =
+    !!currentUser &&
+    (currentUser.role === 'Director' ||
+      currentUser.role === 'Manager' ||
+      project.project_lead === currentUser.id ||
+      project.sponsor === currentUser.id);
 
   const nameOf = (uid) => {
     if (!uid) return null;
@@ -98,7 +112,7 @@ export default function ProjectDetail() {
     await base44.entities.Project.update(id, patch);
     const updated = await base44.entities.Project.get(id);
     if (values.status === 'Done' && project.status !== 'Done') {
-      await notifyProjectDone(updated);
+      await notifyProjectDone(updated, currentUser?.id);
     }
     setProject(updated);
     setEditOpen(false);
@@ -113,7 +127,12 @@ export default function ProjectDetail() {
     setProject(await base44.entities.Project.get(id));
   };
 
-  const canReview = !!currentUser && (currentUser.id === project.sponsor || currentUser.id === project.approver || currentUser.id === project.project_lead || currentUser.role === 'Sponsor');
+  const canReview =
+    !!currentUser &&
+    (currentUser.id === project.sponsor ||
+      currentUser.id === project.approver ||
+      currentUser.id === project.project_lead ||
+      currentUser.role === 'Director');
 
   const handleCompleteReview = async (values) => {
     await base44.entities.Project.update(id, { ...values, review_status: 'Reviewed', reviewed_by: currentUser?.id, reviewed_date: todayISODate() });
@@ -122,24 +141,25 @@ export default function ProjectDetail() {
   };
   const lead = users.find((u) => u.id === project.project_lead);
   const leadName = lead ? (lead.full_name || lead.email) : 'Unassigned';
-  const openBottlenecks = bottlenecks.filter((b) => b.status === 'Open');
-  const oldestOpen = openBottlenecks.length
-    ? openBottlenecks.reduce((a, b) => (daysSince(b.date_flagged) > daysSince(a.date_flagged) ? b : a))
-    : null;
+
+  // ALL open bottlenecks, oldest (most urgent) first
+  const openBottlenecks = bottlenecks
+    .filter((b) => b.status === 'Open')
+    .sort((a, b) => daysSince(b.date_flagged) - daysSince(a.date_flagged));
   const clearedBottlenecks = bottlenecks.filter((b) => b.status === 'Cleared');
 
   const handleStatusChange = async (mid, status) => {
     await base44.entities.Milestone.update(mid, { status, status_since: todayISODate() });
     if (status === 'Delayed' || status === 'Blocked') {
       const m = milestones.find((x) => x.id === mid);
-      if (m) await notifyMilestoneStatus({ ...m, status }, project, status);
+      if (m) await notifyMilestoneStatus({ ...m, status }, project, status, currentUser?.id);
     }
     await refreshMilestones();
   };
 
   const handleAddMilestone = async (values) => {
     const created = await base44.entities.Milestone.create({ ...values, project: id, status_since: todayISODate() });
-    await notifyMilestoneAdded(created, project);
+    await notifyMilestoneAdded(created, project, currentUser?.id);
     await refreshMilestones();
   };
 
@@ -151,7 +171,7 @@ export default function ProjectDetail() {
     }
     await base44.entities.Milestone.update(mid, patch);
     if (existing && values.status && values.status !== existing.status && (values.status === 'Delayed' || values.status === 'Blocked')) {
-      await notifyMilestoneStatus({ ...existing, ...values }, project, values.status);
+      await notifyMilestoneStatus({ ...existing, ...values }, project, values.status, currentUser?.id);
     }
     await refreshMilestones();
   };
@@ -172,7 +192,16 @@ export default function ProjectDetail() {
       milestones_blocked: 0,
       posted_as_challenge: false,
     });
-    await notifyBottleneckFlagged(created, project);
+    // Notify every project participant: lead, sponsor, approver, milestone
+    // owners, involved functions, and the function being waited on.
+    await notifyBottleneckFlagged(created, project, milestones, currentUser?.id);
+    await refreshBottlenecks();
+  };
+
+  const handleBottleneckCleared = async (bottleneck) => {
+    if (bottleneck) {
+      await notifyBottleneckCleared(bottleneck, project, milestones, currentUser?.id);
+    }
     await refreshBottlenecks();
   };
 
@@ -237,19 +266,31 @@ export default function ProjectDetail() {
           <PhaseRoadmap phases={project.phase_names} currentPhase={project.current_phase} />
         </section>
 
-        {oldestOpen && (
-          <BottleneckCard
-            bottleneck={oldestOpen}
-            project={project}
-            currentUser={currentUser}
-            onPosted={refreshBottlenecks}
-            onCleared={refreshBottlenecks}
-          />
+        {/* ALL open bottlenecks, not just the oldest */}
+        {openBottlenecks.length > 0 && (
+          <section className="space-y-3">
+            <h3 className="flex items-center gap-2 text-sm font-semibold text-stone-600 px-1">
+              <AlertOctagon className="w-4 h-4 text-red-500" />
+              Open bottlenecks ({openBottlenecks.length})
+            </h3>
+            {openBottlenecks.map((b) => (
+              <BottleneckCard
+                key={b.id}
+                bottleneck={b}
+                project={project}
+                currentUser={currentUser}
+                onPosted={refreshBottlenecks}
+                onCleared={handleBottleneckCleared}
+              />
+            ))}
+          </section>
         )}
 
         {clearedBottlenecks.length > 0 && (
           <section className="space-y-3">
-            <h3 className="text-sm font-semibold text-stone-600 px-1">Cleared bottlenecks</h3>
+            <h3 className="text-sm font-semibold text-stone-600 px-1">
+              Cleared bottlenecks ({clearedBottlenecks.length})
+            </h3>
             {clearedBottlenecks.map((b) => (
               <BottleneckCard
                 key={b.id}
@@ -257,7 +298,7 @@ export default function ProjectDetail() {
                 project={project}
                 currentUser={currentUser}
                 onPosted={refreshBottlenecks}
-                onCleared={refreshBottlenecks}
+                onCleared={handleBottleneckCleared}
               />
             ))}
           </section>
@@ -274,7 +315,7 @@ export default function ProjectDetail() {
             onDelete={handleDeleteMilestone}
           />
           {!canEditMilestones && (
-            <p className="mt-3 text-[11px] text-stone-400">Read-only — only the project lead and sponsors can edit milestones.</p>
+            <p className="mt-3 text-[11px] text-stone-400">Read-only — only the project lead, sponsor, managers and directors can edit milestones.</p>
           )}
         </section>
 

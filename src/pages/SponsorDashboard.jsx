@@ -1,3 +1,4 @@
+// SponsorDashboard.jsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Navigate } from 'react-router-dom';
 import { base44 } from '@/api/base44Client';
@@ -102,7 +103,15 @@ export default function SponsorDashboard() {
     );
   }
 
-  if (currentUser?.role !== 'Sponsor') {
+  // Roles are Employee / Manager / Director. Oversight view is for Managers and
+  // Directors, plus anyone sponsoring at least one project.
+  // (To restrict to Directors only, delete the Manager and sponsorsAProject lines.)
+  const sponsorsAProject = !!currentUser && projects.some((p) => p.sponsor === currentUser.id);
+  const canViewDashboard =
+    !!currentUser &&
+    (currentUser.role === 'Director' || currentUser.role === 'Manager' || sponsorsAProject);
+
+  if (!canViewDashboard) {
     return <Navigate to="/" replace />;
   }
 

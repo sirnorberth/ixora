@@ -1,3 +1,4 @@
+// BottleneckCard.jsx
 import React, { useState } from 'react';
 import { AlertOctagon, Megaphone, Send, CheckCircle2, Check } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
@@ -14,9 +15,14 @@ export default function BottleneckCard({ bottleneck, project, currentUser, onPos
     : daysSince(bottleneck.date_flagged);
   const posted = bottleneck.posted_as_challenge || localPosted;
 
+  // Roles are Employee / Manager / Director. Managers and Directors can manage
+  // any bottleneck; the project's own lead or sponsor can manage theirs.
   const canManage =
-    currentUser &&
-    (currentUser.role === 'Project Lead' || currentUser.role === 'Sponsor' || currentUser.id === project?.project_lead);
+    !!currentUser &&
+    (currentUser.role === 'Director' ||
+      currentUser.role === 'Manager' ||
+      currentUser.id === project?.project_lead ||
+      currentUser.id === project?.sponsor);
 
   const handlePost = async () => {
     if (posting || !project) return;
@@ -49,7 +55,7 @@ export default function BottleneckCard({ bottleneck, project, currentUser, onPos
   const handleClear = async () => {
     try {
       await base44.entities.Bottleneck.update(bottleneck.id, { status: 'Cleared', date_cleared: todayISODate() });
-      onCleared?.();
+      onCleared?.(bottleneck);
     } catch (e) {
       console.error(e);
     }

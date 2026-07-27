@@ -1,7 +1,14 @@
+export const ROLES = ["Employee", "Manager", "Director"];
+
 export const DEPARTMENTS = [
-  "Production", "QA/QC", "Engineering", "Procurement",
-  "Research & Development", "Business Intelligence", "Tech",
-  "Sales & Marketing", "Regulatory", "Finance", "HR & Admin", "Supply Chain"
+  "Production/Manufacturing",
+  "HR/Admin",
+  "Procurement",
+  "Supply Chain",
+  "Marketing",
+  "Regulatory",
+  "R & D",
+  "Finance",
 ];
 
 export const SKILL_TAGS = [

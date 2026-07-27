@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+// NOTIFICATIONBELL.JSX
+import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { base44 } from '@/api/base44Client';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import { Bell, CheckCheck } from 'lucide-react';
@@ -19,10 +20,11 @@ function NotifItem({ n, onTap }) {
 
 export default function NotificationBell() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState([]);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     try {
       const me = await base44.auth.me().catch(() => null);
       if (!me) return;
@@ -31,11 +33,29 @@ export default function NotificationBell() {
     } catch (e) {
       console.error(e);
     }
-  };
+  }, []);
 
+  // Initial load + refresh whenever the user navigates to another page
   useEffect(() => {
     load();
-  }, []);
+  }, [load, location.pathname]);
+
+  // Poll every 60s so the badge updates while the user sits on one screen
+  useEffect(() => {
+    const id = setInterval(load, 60000);
+    return () => clearInterval(id);
+  }, [load]);
+
+  // Refresh when the tab regains focus (e.g. back from email or another app)
+  useEffect(() => {
+    const onFocus = () => load();
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onFocus);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onFocus);
+    };
+  }, [load]);
 
   const unread = items.filter((n) => !n.read).length;
 
@@ -52,11 +72,15 @@ export default function NotificationBell() {
   const markAllRead = async () => {
     const unreadItems = items.filter((n) => !n.read);
     if (!unreadItems.length) return;
+    // Optimistic: update the UI first, then persist
+    setItems((prev) => prev.map((x) => ({ ...x, read: true })));
     try {
-      await base44.entities.Notification.bulkUpdate(unreadItems.map((n) => ({ id: n.id, read: true })));
-      setItems((prev) => prev.map((x) => ({ ...x, read: true })));
+      await base44.entities.Notification.bulkUpdate(
+        unreadItems.map((n) => ({ ...n, read: true }))
+      );
     } catch (e) {
       console.error(e);
+      load(); // roll back to server truth if it failed
     }
   };
 

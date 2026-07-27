@@ -1,3 +1,4 @@
+// FlagBottleneck.jsx
 import React, { useState } from 'react';
 import { Flag, Send } from 'lucide-react';
 import { Button } from '@/components/ui/button';

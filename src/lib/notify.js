@@ -1,3 +1,5 @@
+// NOTIFY.JS
+
 import { base44 } from '@/api/base44Client';
 
 function nameOf(u) {
@@ -22,39 +24,94 @@ async function getUsers() {
   }
 }
 
+// Remove duplicates and (optionally) the person who triggered the action
+function uniqueTargets(users, excludeId) {
+  const map = new Map();
+  users.forEach((u) => {
+    if (u && u.id && u.id !== excludeId) map.set(u.id, u);
+  });
+  return [...map.values()];
+}
+
 // Projects ---------------------------------------------------------------
 
-export async function notifyMilestoneAdded(milestone, project) {
+export async function notifyMilestoneAdded(milestone, project, excludeUserId = null) {
   if (!milestone?.owning_function) return;
   const users = await getUsers();
-  const targets = users.filter((u) => u.department === milestone.owning_function);
+  const targets = uniqueTargets(
+    users.filter((u) => u.department === milestone.owning_function || u.id === milestone.owner),
+    excludeUserId
+  );
   const text = `New milestone for your function: "${milestone.title}"${project?.name ? ` on ${project.name}` : ''}.`;
   await createMany(targets.map((u) => ({ user: u.id, category: 'task', text, link: project ? `/projects/${project.id}` : '/projects' })));
 }
 
-export async function notifyMilestoneStatus(milestone, project, status) {
+export async function notifyMilestoneStatus(milestone, project, status, excludeUserId = null) {
   if (!milestone?.owning_function) return;
   const users = await getUsers();
-  const targets = users.filter((u) => u.department === milestone.owning_function);
+  const targets = uniqueTargets(
+    users.filter(
+      (u) =>
+        u.department === milestone.owning_function ||
+        u.id === milestone.owner ||
+        u.id === project?.project_lead ||
+        u.id === project?.sponsor
+    ),
+    excludeUserId
+  );
   const text = `Milestone "${milestone.title}" is now ${status}${project?.name ? ` on ${project.name}` : ''}.`;
   await createMany(
     targets.map((u) => ({ user: u.id, category: status === 'Blocked' ? 'task' : 'update', text, link: project ? `/projects/${project.id}` : '/projects' }))
   );
 }
 
-export async function notifyBottleneckFlagged(bottleneck, project) {
+// Notifies EVERY project participant: lead, sponsor, approver, all milestone
+// owners, everyone in an involved function, and the function being waited on.
+export async function notifyBottleneckFlagged(bottleneck, project, milestones = [], excludeUserId = null) {
   const users = await getUsers();
   const fns = project?.functions_involved || [];
-  const targets = users.filter(
-    (u) => u.id === project?.project_lead || u.id === project?.sponsor || u.id === project?.approver || fns.includes(u.department)
+  const ownerIds = new Set((milestones || []).map((m) => m.owner).filter(Boolean));
+  const targets = uniqueTargets(
+    users.filter(
+      (u) =>
+        u.id === project?.project_lead ||
+        u.id === project?.sponsor ||
+        u.id === project?.approver ||
+        ownerIds.has(u.id) ||
+        fns.includes(u.department) ||
+        u.department === bottleneck?.waiting_on
+    ),
+    excludeUserId
   );
-  const text = `Bottleneck flagged on ${project?.name || 'a project'}: "${bottleneck?.title}".`;
+  const text = `Bottleneck flagged on ${project?.name || 'a project'}: "${bottleneck?.title}"${bottleneck?.waiting_on ? ` — waiting on ${bottleneck.waiting_on}` : ''}.`;
   await createMany(targets.map((u) => ({ user: u.id, category: 'task', text, link: project ? `/projects/${project.id}` : '/projects' })));
 }
 
-export async function notifyProjectDone(project) {
+export async function notifyBottleneckCleared(bottleneck, project, milestones = [], excludeUserId = null) {
   const users = await getUsers();
-  const targets = users.filter((u) => u.id === project?.sponsor || u.id === project?.approver);
+  const fns = project?.functions_involved || [];
+  const ownerIds = new Set((milestones || []).map((m) => m.owner).filter(Boolean));
+  const targets = uniqueTargets(
+    users.filter(
+      (u) =>
+        u.id === project?.project_lead ||
+        u.id === project?.sponsor ||
+        u.id === project?.approver ||
+        ownerIds.has(u.id) ||
+        fns.includes(u.department)
+    ),
+    excludeUserId
+  );
+  const text = `Bottleneck cleared on ${project?.name || 'a project'}: "${bottleneck?.title}".`;
+  await createMany(targets.map((u) => ({ user: u.id, category: 'update', text, link: project ? `/projects/${project.id}` : '/projects' })));
+}
+
+export async function notifyProjectDone(project, excludeUserId = null) {
+  const users = await getUsers();
+  const targets = uniqueTargets(
+    users.filter((u) => u.id === project?.sponsor || u.id === project?.approver),
+    excludeUserId
+  );
   const text = `"${project?.name}" was marked Done — your impact review is needed.`;
   await createMany(targets.map((u) => ({ user: u.id, category: 'task', text, link: project ? `/projects/${project.id}` : '/projects' })));
 }

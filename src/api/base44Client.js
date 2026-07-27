@@ -64,6 +64,23 @@ function makeEntity(name) {
       return data;
     },
 
+    // Insert many rows at once (used by notify.js)
+    async bulkCreate(rows) {
+      if (!rows || rows.length === 0) return [];
+      const { data, error } = await supabase.from(table).insert(rows).select();
+      throwIf(error);
+      return data || [];
+    },
+
+    // Update many rows at once. Pass FULL row objects (each must include id).
+    async bulkUpdate(rows) {
+      if (!rows || rows.length === 0) return [];
+      const stamped = rows.map((r) => ({ ...r, updated_date: new Date().toISOString() }));
+      const { data, error } = await supabase.from(table).upsert(stamped).select();
+      throwIf(error);
+      return data || [];
+    },
+
     async list(sort, limit) {
       let q = supabase.from(table).select('*');
       q = applySort(q, sort);
