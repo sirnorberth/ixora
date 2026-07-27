@@ -3,26 +3,7 @@ import React, { useState } from 'react';
 import { Plus } from 'lucide-react';
 import MilestoneItem from './MilestoneItem';
 import MilestoneFormDialog from './MilestoneFormDialog';
-
-// Each milestone contributes a share of completion:
-// Done = 100%, In progress = 50%, Delayed = 25%, Planned/Blocked = 0%.
-const STATUS_WEIGHT = {
-  Done: 1,
-  'In progress': 0.5,
-  Delayed: 0.25,
-  Planned: 0,
-  Blocked: 0,
-};
-
-export function milestoneProgress(milestones = []) {
-  if (!milestones.length) return { pct: 0, done: 0, total: 0 };
-  const score = milestones.reduce((s, m) => s + (STATUS_WEIGHT[m.status] ?? 0), 0);
-  return {
-    pct: Math.round((score / milestones.length) * 100),
-    done: milestones.filter((m) => m.status === 'Done').length,
-    total: milestones.length,
-  };
-}
+import { milestoneProgress } from '@/lib/progress';
 
 export default function MilestoneList({ milestones, users, canEdit, onStatusChange, onAdd, onUpdate, onDelete }) {
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -49,8 +30,8 @@ export default function MilestoneList({ milestones, users, canEdit, onStatusChan
 
   // Recomputed on every render, so it moves the moment a status changes
   const { pct, done, total } = milestoneProgress(milestones);
-  const blocked = milestones.filter((m) => m.status === 'Blocked').length;
-  const delayed = milestones.filter((m) => m.status === 'Delayed').length;
+  const blocked = (milestones || []).filter((m) => m.status === 'Blocked').length;
+  const delayed = (milestones || []).filter((m) => m.status === 'Delayed').length;
 
   return (
     <div>
@@ -78,14 +59,14 @@ export default function MilestoneList({ milestones, users, canEdit, onStatusChan
           </div>
           <div className="h-2.5 bg-stone-100 rounded-full overflow-hidden">
             <div
-              className="h-full bg-[#EA580C] rounded-full transition-all duration-500"
+              className={`h-full rounded-full transition-all duration-500 ${pct === 100 ? 'bg-emerald-500' : 'bg-[#EA580C]'}`}
               style={{ width: `${pct}%` }}
             />
           </div>
         </div>
       )}
 
-      {milestones.length === 0 ? (
+      {(!milestones || milestones.length === 0) ? (
         <p className="text-sm text-stone-400 py-4">No milestones yet.</p>
       ) : (
         <div>

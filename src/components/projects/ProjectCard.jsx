@@ -2,16 +2,22 @@ import React from 'react';
 import { AlertTriangle, CheckCircle2, Calendar } from 'lucide-react';
 import HealthBadge from './HealthBadge';
 import ApprovalBadge from './ApprovalBadge';
-import { milestoneProgress } from './MilestoneList';
+import { projectProgress } from '@/lib/progress';
 import { fmtDate, daysSince } from '@/lib/dateUtils';
 
 export default function ProjectCard({ project, milestones, bottlenecks }) {
-  // Shared with the project detail page so both bars always agree.
-  // Done = 100%, In progress = 50%, Delayed = 25%, Planned/Blocked = 0%.
-  const { pct: percent, done, total } = milestoneProgress(milestones || []);
+  // Milestones when they exist; phase or status as a fallback.
+  const { pct: percent, done, total, basis } = projectProgress(project, milestones || []);
 
   const open = (bottlenecks || []).filter((b) => b.status === 'Open');
   const oldestAge = open.length ? Math.max(...open.map((b) => daysSince(b.date_flagged))) : 0;
+
+  const progressLabel =
+    basis === 'milestones'
+      ? `Progress · ${done}/${total} milestones`
+      : basis === 'phases'
+      ? `Progress · ${project.current_phase}`
+      : `Progress · ${project.status || 'Not Started'}`;
 
   return (
     <div className="bg-white rounded-2xl border border-stone-100 shadow-sm p-4 hover:shadow-md hover:border-orange-200 transition h-full">
@@ -48,12 +54,18 @@ export default function ProjectCard({ project, milestones, bottlenecks }) {
 
       <div className="mt-3">
         <div className="flex justify-between text-xs text-stone-500 mb-1">
-          <span>Progress{total > 0 ? ` · ${done}/${total} done` : ''}</span>
-          <span className="font-semibold text-stone-700">{percent}%</span>
+          <span className="truncate">{progressLabel}</span>
+          <span className="font-semibold text-stone-700 shrink-0 ml-2">{percent}%</span>
         </div>
         <div className="h-2 rounded-full bg-stone-100 overflow-hidden">
-          <div className="h-full bg-[#EA580C] rounded-full transition-all duration-500" style={{ width: `${percent}%` }} />
+          <div
+            className={`h-full rounded-full transition-all duration-500 ${percent === 100 ? 'bg-emerald-500' : 'bg-[#EA580C]'}`}
+            style={{ width: `${percent}%` }}
+          />
         </div>
+        {basis !== 'milestones' && total === 0 && project.status !== 'Done' && (
+          <p className="mt-1 text-[10px] text-stone-400">Add milestones for accurate progress.</p>
+        )}
       </div>
     </div>
   );
