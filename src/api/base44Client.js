@@ -265,9 +265,26 @@ const auth = {
   },
 };
 
+// ---- Integrations: email via the Supabase Edge Function 'send-email' ----
+// The Resend API key lives on the server, never in this frontend bundle.
+
+const integrations = {
+  Core: {
+    async SendEmail({ to, subject, body }) {
+      const { data, error } = await supabase.functions.invoke('send-email', {
+        body: { to, subject, body },
+      });
+      if (error) throw new Error(error.message || 'Email could not be sent');
+      if (data?.error) throw new Error(data.error);
+      return data;
+    },
+  },
+};
+
 export const base44 = {
   entities: new Proxy({}, {
     get: (_, entityName) => makeEntity(entityName),
   }),
   auth,
+  integrations,
 };

@@ -101,7 +101,8 @@ export default function Projects() {
           body: `Hi ${u.full_name || ''},\n\nA new project "${created.name}" has been created on Ixora and you're listed as the ${role}.${role === 'approver' ? ' It needs your approval — open Ixora to review.' : ' Open Ixora to view the project.'}`,
         });
       } catch (e) {
-        console.error(e);
+        // Email is a nice-to-have here — never block project creation
+        console.error('Project notification email failed:', e);
       }
     };
     await Promise.all([notify(approver, 'approver'), notify(sponsor, 'sponsor')]);
@@ -124,7 +125,7 @@ export default function Projects() {
     }
     await base44.entities.Project.update(projectId, patch);
     if (newStatus === 'Done' && proj.status !== 'Done') {
-      await notifyProjectDone({ ...proj, ...patch });
+      await notifyProjectDone({ ...proj, ...patch }, currentUser?.id);
     }
     setProjects((prev) => prev.map((p) => (p.id === projectId ? { ...p, ...patch } : p)));
   };
@@ -157,6 +158,9 @@ export default function Projects() {
       });
     } catch (e) {
       console.error(e);
+      // Re-throw so the banner can show a real failure instead of
+      // claiming the email was sent.
+      throw e;
     } finally {
       setNotifying(false);
     }

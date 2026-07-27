@@ -1,9 +1,11 @@
+// YourTasksBanner.jsx
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ClipboardList, Mail, ChevronRight } from 'lucide-react';
+import { ClipboardList, Mail, ChevronRight, AlertCircle } from 'lucide-react';
 
 export default function YourTasksBanner({ myTasks, projects, onNotify, notifying }) {
   const [done, setDone] = useState(false);
+  const [failed, setFailed] = useState('');
 
   const byProject = {};
   myTasks.forEach((m) => {
@@ -13,9 +15,17 @@ export default function YourTasksBanner({ myTasks, projects, onNotify, notifying
   const count = myTasks.length;
 
   const handleNotify = async () => {
-    await onNotify();
-    setDone(true);
-    setTimeout(() => setDone(false), 2500);
+    setFailed('');
+    setDone(false);
+    try {
+      await onNotify();
+      setDone(true);
+      setTimeout(() => setDone(false), 3000);
+    } catch (e) {
+      // Tell the truth instead of claiming success
+      setFailed(e?.message || 'Could not send the email. Please try again.');
+      setTimeout(() => setFailed(''), 6000);
+    }
   };
 
   return (
@@ -64,6 +74,11 @@ export default function YourTasksBanner({ myTasks, projects, onNotify, notifying
         </button>
       </div>
       {done && <p className="mt-2 text-xs text-orange-50">Summary sent to your inbox.</p>}
+      {failed && (
+        <p className="mt-2 flex items-start gap-1.5 text-xs text-white bg-red-900/30 rounded-lg px-2.5 py-2">
+          <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" /> {failed}
+        </p>
+      )}
     </div>
   );
 }
