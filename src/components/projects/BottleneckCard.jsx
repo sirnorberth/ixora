@@ -1,13 +1,15 @@
 // BottleneckCard.jsx
 import React, { useState } from 'react';
-import { AlertOctagon, Megaphone, Send, CheckCircle2, Check } from 'lucide-react';
+import { AlertOctagon, Megaphone, Send, CheckCircle2, Check, Pencil } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
+import BottleneckFormDialog from './BottleneckFormDialog';
 import { daysSince, daysBetween, todayISODate } from '@/lib/dateUtils';
 
-export default function BottleneckCard({ bottleneck, project, currentUser, onPosted, onCleared }) {
+export default function BottleneckCard({ bottleneck, project, currentUser, onPosted, onCleared, onUpdated }) {
   const [nudged, setNudged] = useState(false);
   const [localPosted, setLocalPosted] = useState(false);
   const [posting, setPosting] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
 
   const cleared = bottleneck.status === 'Cleared';
   const age = bottleneck.date_cleared
@@ -23,6 +25,9 @@ export default function BottleneckCard({ bottleneck, project, currentUser, onPos
       currentUser.role === 'Manager' ||
       currentUser.id === project?.project_lead ||
       currentUser.id === project?.sponsor);
+
+  // Whoever flagged it can also correct their own entry
+  const canEdit = canManage || (!!currentUser && currentUser.id === bottleneck.flagged_by);
 
   const handlePost = async () => {
     if (posting || !project) return;
@@ -61,6 +66,24 @@ export default function BottleneckCard({ bottleneck, project, currentUser, onPos
     }
   };
 
+  const handleUpdate = async (values) => {
+    const patch = { ...values };
+    const wasOpen = bottleneck.status === 'Open';
+    // Keep date_cleared consistent with the chosen status
+    if (values.status === 'Cleared' && wasOpen) patch.date_cleared = todayISODate();
+    if (values.status === 'Open') patch.date_cleared = null;
+
+    await base44.entities.Bottleneck.update(bottleneck.id, patch);
+    setEditOpen(false);
+
+    if (values.status === 'Cleared' && wasOpen) {
+      // Clearing from the dialog should notify, same as the Mark cleared button
+      onCleared?.({ ...bottleneck, ...patch });
+    } else {
+      (onUpdated || onPosted)?.();
+    }
+  };
+
   return (
     <div className={`bg-white rounded-2xl border-2 shadow-sm p-4 ${cleared ? 'border-emerald-300' : 'border-red-300'}`}>
       <div className="flex items-start justify-between gap-2">
@@ -86,42 +109,63 @@ export default function BottleneckCard({ bottleneck, project, currentUser, onPos
         <span>Blocking <span className="font-semibold text-red-600">{bottleneck.milestones_blocked || 0}</span> downstream milestones</span>
       </div>
 
-      {!cleared && (
-        <div className="mt-4 flex flex-wrap gap-2">
+      <div className="mt-4 flex flex-wrap gap-2">
+        {!cleared && (
+          <>
+            <button
+              onClick={() => setNudged(true)}
+              className="inline-flex items-center gap-1.5 text-sm font-semibold text-stone-700 bg-stone-100 hover:bg-stone-200 px-3 py-2 rounded-xl transition"
+            >
+              <Megaphone className="w-4 h-4" /> Nudge owner
+            </button>
+            {posted ? (
+              <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-emerald-700 bg-emerald-50 px-3 py-2 rounded-xl">
+                <CheckCircle2 className="w-4 h-4" /> Open challenge posted
+              </span>
+            ) : canManage ? (
+              <button
+                onClick={handlePost}
+                disabled={posting}
+                className="inline-flex items-center gap-1.5 text-sm font-semibold text-white bg-[#EA580C] hover:bg-[#c2410c] px-3 py-2 rounded-xl transition disabled:opacity-50"
+              >
+                <Send className="w-4 h-4" /> {posting ? 'Posting…' : 'Post as challenge'}
+              </button>
+            ) : null}
+            {canManage && (
+              <button
+                onClick={handleClear}
+                className="inline-flex items-center gap-1.5 text-sm font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-3 py-2 rounded-xl transition"
+              >
+                <Check className="w-4 h-4" /> Mark cleared
+              </button>
+            )}
+          </>
+        )}
+
+        {/* Available whether open or cleared, so mistakes can always be fixed */}
+        {canEdit && (
           <button
-            onClick={() => setNudged(true)}
-            className="inline-flex items-center gap-1.5 text-sm font-semibold text-stone-700 bg-stone-100 hover:bg-stone-200 px-3 py-2 rounded-xl transition"
+            onClick={() => setEditOpen(true)}
+            className="inline-flex items-center gap-1.5 text-sm font-semibold text-stone-700 bg-white border border-stone-200 hover:border-orange-300 hover:text-[#EA580C] px-3 py-2 rounded-xl transition"
           >
-            <Megaphone className="w-4 h-4" /> Nudge owner
+            <Pencil className="w-4 h-4" /> Update status
           </button>
-          {posted ? (
-            <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-emerald-700 bg-emerald-50 px-3 py-2 rounded-xl">
-              <CheckCircle2 className="w-4 h-4" /> Open challenge posted
-            </span>
-          ) : canManage ? (
-            <button
-              onClick={handlePost}
-              disabled={posting}
-              className="inline-flex items-center gap-1.5 text-sm font-semibold text-white bg-[#EA580C] hover:bg-[#c2410c] px-3 py-2 rounded-xl transition disabled:opacity-50"
-            >
-              <Send className="w-4 h-4" /> {posting ? 'Posting…' : 'Post as challenge'}
-            </button>
-          ) : null}
-          {canManage && (
-            <button
-              onClick={handleClear}
-              className="inline-flex items-center gap-1.5 text-sm font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-3 py-2 rounded-xl transition"
-            >
-              <Check className="w-4 h-4" /> Mark cleared
-            </button>
-          )}
-        </div>
-      )}
+        )}
+      </div>
 
       {nudged && (
         <p className="mt-3 text-xs font-medium text-emerald-700 bg-emerald-50 rounded-lg px-3 py-2">
           {bottleneck.waiting_on || 'Owner'} nudged — visible on the project feed
         </p>
+      )}
+
+      {canEdit && (
+        <BottleneckFormDialog
+          open={editOpen}
+          onOpenChange={setEditOpen}
+          bottleneck={bottleneck}
+          onSubmit={handleUpdate}
+        />
       )}
     </div>
   );

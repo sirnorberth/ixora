@@ -13,6 +13,7 @@ import ProjectFormDialog from '@/components/projects/ProjectFormDialog';
 import ApprovalBadge from '@/components/projects/ApprovalBadge';
 import ProjectStatusBadge from '@/components/projects/ProjectStatusBadge';
 import ProjectReviewDialog from '@/components/projects/ProjectReviewDialog';
+import ProjectChat from '@/components/projects/ProjectChat';
 import AppHeader from '@/components/AppHeader';
 import {
   notifyMilestoneAdded,
@@ -281,6 +282,7 @@ export default function ProjectDetail() {
                 currentUser={currentUser}
                 onPosted={refreshBottlenecks}
                 onCleared={handleBottleneckCleared}
+                onUpdated={refreshBottlenecks}
               />
             ))}
           </section>
@@ -299,6 +301,7 @@ export default function ProjectDetail() {
                 currentUser={currentUser}
                 onPosted={refreshBottlenecks}
                 onCleared={handleBottleneckCleared}
+                onUpdated={refreshBottlenecks}
               />
             ))}
           </section>
@@ -364,6 +367,14 @@ export default function ProjectDetail() {
             onSubmit={handleCompleteReview}
           />
         )}
+
+        {/* Floating project discussion button + panel */}
+        <ProjectChat
+          project={project}
+          currentUser={currentUser}
+          users={users}
+          milestones={milestones}
+        />
       </main>
     </div>
   );

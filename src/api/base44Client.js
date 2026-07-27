@@ -23,6 +23,7 @@ const TABLE_MAP = {
   MentorMatch: 'mentor_matches',
   Notification: 'notifications',
   ResistanceLog: 'resistance_logs',
+  ProjectMessage: 'project_messages',
 };
 
 function tableFor(entityName) {

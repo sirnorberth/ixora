@@ -116,6 +116,30 @@ export async function notifyProjectDone(project, excludeUserId = null) {
   await createMany(targets.map((u) => ({ user: u.id, category: 'task', text, link: project ? `/projects/${project.id}` : '/projects' })));
 }
 
+// New chat message — tell every project participant except the sender
+export async function notifyProjectMessage(message, project, milestones = [], sender = null) {
+  const users = await getUsers();
+  const fns = project?.functions_involved || [];
+  const ownerIds = new Set((milestones || []).map((m) => m.owner).filter(Boolean));
+  const targets = uniqueTargets(
+    users.filter(
+      (u) =>
+        u.id === project?.project_lead ||
+        u.id === project?.sponsor ||
+        u.id === project?.approver ||
+        ownerIds.has(u.id) ||
+        fns.includes(u.department)
+    ),
+    sender?.id
+  );
+  const full = message?.text || '';
+  const snippet = full.length > 80 ? `${full.slice(0, 80)}…` : full;
+  const text = `${nameOf(sender)} posted in ${project?.name || 'a project'}: "${snippet}"`;
+  await createMany(
+    targets.map((u) => ({ user: u.id, category: 'update', text, link: project ? `/projects/${project.id}` : '/projects' }))
+  );
+}
+
 // Challenges -------------------------------------------------------------
 
 export async function notifyChallengeApplication(application, challenge, applicant, sponsorUser) {
