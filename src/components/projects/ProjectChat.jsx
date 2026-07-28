@@ -93,7 +93,7 @@ export default function ProjectChat({ project, currentUser, users = [], mileston
       setMessages((prev) => [...prev, created]);
       setDraft('');
       setReplyTo(null);
-      notifyProjectMessage(created, project, milestones, currentUser).catch(() => {});
+      notifyProjectMessage(created, project, milestones, currentUser, replyTo?.author).catch(() => {});
     } catch (e) {
       console.error(e);
     } finally {

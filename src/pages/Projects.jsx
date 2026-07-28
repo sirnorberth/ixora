@@ -8,7 +8,7 @@ import ProjectFormDialog from '@/components/projects/ProjectFormDialog';
 import YourTasksBanner from '@/components/projects/YourTasksBanner';
 import KanbanBoard from '@/components/projects/KanbanBoard';
 import AppHeader from '@/components/AppHeader';
-import { notifyProjectDone } from '@/lib/notify';
+import { notifyProjectDone, notifyProjectCreated } from '@/lib/notify';
 
 const orderKey = (uid) => `ixora_project_order_${uid || 'anon'}`;
 
@@ -106,6 +106,8 @@ export default function Projects() {
       }
     };
     await Promise.all([notify(approver, 'approver'), notify(sponsor, 'sponsor')]);
+    // In-app notification for the whole project team
+    notifyProjectCreated(created, currentUser).catch((e) => console.error(e));
     setProjects((prev) => [created, ...prev]);
     setOrder((prev) => [created.id, ...prev]);
     try {
