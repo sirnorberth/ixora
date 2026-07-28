@@ -11,17 +11,22 @@ export default function ForgotPassword() {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
+  const [error, setError] = useState("");
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setError("");
     setLoading(true);
     try {
-      await base44.auth.resetPasswordRequest(email);
-    } catch {
-      // Always show success regardless
+      await base44.auth.sendPasswordResetEmail(email);
+      setSent(true);
+    } catch (err) {
+      // Supabase deliberately succeeds even for unknown emails, so a real
+      // error here means something is misconfigured — show it rather than
+      // pretending the email went out.
+      setError(err?.message || "Could not send the reset email. Please try again.");
     } finally {
       setLoading(false);
-      setSent(true);
     }
   };
 
@@ -39,9 +44,15 @@ export default function ForgotPassword() {
       {sent ? (
         <p className="text-sm text-foreground text-center">
           If an account exists with that email, you'll receive a password reset link shortly.
+          Check your spam folder if it doesn't arrive within a few minutes.
         </p>
       ) : (
         <form onSubmit={handleSubmit} className="space-y-4">
+          {error && (
+            <div className="p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
+              {error}
+            </div>
+          )}
           <div className="space-y-2">
             <Label htmlFor="email">Email address</Label>
             <div className="relative">

@@ -231,9 +231,24 @@ const auth = {
     return { success: true };
   },
 
-  async resetPassword(_token, newPassword) {
-    // Supabase puts the user in a recovery session via the email link,
-    // so we just set the new password on the current session.
+  // Alias used by the ForgotPassword page
+  async resetPasswordRequest(email) {
+    return auth.sendPasswordResetEmail(email);
+  },
+
+  async forgotPassword(email) {
+    return auth.sendPasswordResetEmail(email);
+  },
+
+  // Accepts either resetPassword(token, newPassword) or
+  // resetPassword({ newPassword }) — the email link already put the user
+  // in a recovery session, so only the new password matters.
+  async resetPassword(arg, maybeNewPassword) {
+    const newPassword =
+      arg && typeof arg === 'object'
+        ? (arg.newPassword || arg.password)
+        : maybeNewPassword;
+    if (!newPassword) throw new Error('No new password provided');
     const { error } = await supabase.auth.updateUser({ password: newPassword });
     throwIf(error);
     return { success: true };
