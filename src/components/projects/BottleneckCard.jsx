@@ -26,8 +26,11 @@ export default function BottleneckCard({ bottleneck, project, currentUser, onPos
       currentUser.id === project?.project_lead ||
       currentUser.id === project?.sponsor);
 
-  // Whoever flagged it can also correct their own entry
-  const canEdit = canManage || (!!currentUser && currentUser.id === bottleneck.flagged_by);
+  // Editing is deliberately narrow: only the person who flagged it (to fix
+  // their own mistake) and the project lead (to keep the record accurate).
+  const canEdit =
+    !!currentUser &&
+    (currentUser.id === bottleneck.flagged_by || currentUser.id === project?.project_lead);
 
   const handlePost = async () => {
     if (posting || !project) return;
