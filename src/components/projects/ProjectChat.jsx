@@ -5,7 +5,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { base44 } from '@/api/base44Client';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
-import { MessageCircle, Send, CornerUpLeft, X, Loader2 } from 'lucide-react';
+import { MessageCircle, Send, CornerUpLeft, X, Loader2, Pencil, Check } from 'lucide-react';
 import { notifyProjectMessage } from '@/lib/notify';
 
 function initials(name) {
@@ -25,6 +25,13 @@ function whenLabel(iso) {
   return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
 }
 
+// Treat a message as edited if it was updated more than a couple of seconds
+// after it was created (the create call stamps both fields at once).
+function wasEdited(m) {
+  if (!m?.created_date || !m?.updated_date) return false;
+  return new Date(m.updated_date).getTime() - new Date(m.created_date).getTime() > 2000;
+}
+
 export default function ProjectChat({ project, currentUser, users = [], milestones = [] }) {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState([]);
@@ -32,6 +39,12 @@ export default function ProjectChat({ project, currentUser, users = [], mileston
   const [replyTo, setReplyTo] = useState(null);
   const [sending, setSending] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  // Inline editing
+  const [editingId, setEditingId] = useState(null);
+  const [editDraft, setEditDraft] = useState('');
+  const [savingEdit, setSavingEdit] = useState(false);
+
   const endRef = useRef(null);
 
   const nameOf = (uid) => {
@@ -53,17 +66,18 @@ export default function ProjectChat({ project, currentUser, users = [], mileston
 
   useEffect(() => { load(); }, [load]);
 
-  // Refresh while the panel is open so replies from others appear
+  // Refresh while the panel is open so replies from others appear.
+  // Skipped while editing so a poll can't wipe what you're typing.
   useEffect(() => {
-    if (!open) return;
+    if (!open || editingId) return;
     const id = setInterval(load, 15000);
     return () => clearInterval(id);
-  }, [open, load]);
+  }, [open, editingId, load]);
 
   // Keep the newest message in view
   useEffect(() => {
-    if (open) endRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, open]);
+    if (open && !editingId) endRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, open, editingId]);
 
   const send = async () => {
     const text = draft.trim();
@@ -79,7 +93,6 @@ export default function ProjectChat({ project, currentUser, users = [], mileston
       setMessages((prev) => [...prev, created]);
       setDraft('');
       setReplyTo(null);
-      // Tell the rest of the project there's a new message
       notifyProjectMessage(created, project, milestones, currentUser).catch(() => {});
     } catch (e) {
       console.error(e);
@@ -88,11 +101,52 @@ export default function ProjectChat({ project, currentUser, users = [], mileston
     }
   };
 
+  const startEdit = (m) => {
+    setEditingId(m.id);
+    setEditDraft(m.text);
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditDraft('');
+  };
+
+  const saveEdit = async () => {
+    const text = editDraft.trim();
+    if (!text || savingEdit) return;
+    const original = messages.find((m) => m.id === editingId);
+    if (original && text === original.text) {
+      cancelEdit();
+      return;
+    }
+    setSavingEdit(true);
+    try {
+      const updated = await base44.entities.ProjectMessage.update(editingId, { text });
+      setMessages((prev) => prev.map((m) => (m.id === editingId ? updated : m)));
+      cancelEdit();
+    } catch (e) {
+      console.error('Could not update the message', e);
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
   const onKeyDown = (e) => {
     // Enter sends, Shift+Enter makes a new line
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       send();
+    }
+  };
+
+  const onEditKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      saveEdit();
+    }
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      cancelEdit();
     }
   };
 
@@ -138,6 +192,8 @@ export default function ProjectChat({ project, currentUser, users = [], mileston
               messages.map((m) => {
                 const mine = m.author === currentUser?.id;
                 const parent = m.reply_to ? messageById(m.reply_to) : null;
+                const isEditing = editingId === m.id;
+
                 return (
                   <div key={m.id} className={`flex gap-2.5 ${mine ? 'flex-row-reverse' : ''}`}>
                     <div className="w-8 h-8 shrink-0 rounded-full bg-orange-100 text-[#EA580C] font-bold text-sm flex items-center justify-center">
@@ -158,22 +214,65 @@ export default function ProjectChat({ project, currentUser, users = [], mileston
                         </div>
                       )}
 
-                      <div
-                        className={`inline-block px-3 py-2 rounded-2xl text-sm whitespace-pre-wrap break-words text-left ${
-                          mine ? 'bg-[#EA580C] text-white' : 'bg-white text-stone-800 border border-stone-100'
-                        }`}
-                      >
-                        {m.text}
-                      </div>
+                      {isEditing ? (
+                        <div className="text-left">
+                          <textarea
+                            rows={3}
+                            autoFocus
+                            value={editDraft}
+                            onChange={(e) => setEditDraft(e.target.value)}
+                            onKeyDown={onEditKeyDown}
+                            className="w-full resize-none rounded-xl border border-[#EA580C] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-200"
+                          />
+                          <div className="mt-1.5 flex items-center gap-2">
+                            <button
+                              onClick={saveEdit}
+                              disabled={!editDraft.trim() || savingEdit}
+                              className="inline-flex items-center gap-1 text-xs font-semibold text-white bg-[#EA580C] hover:bg-[#c2410c] px-2.5 py-1.5 rounded-lg transition disabled:opacity-50"
+                            >
+                              {savingEdit ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                              Save
+                            </button>
+                            <button
+                              onClick={cancelEdit}
+                              className="inline-flex items-center gap-1 text-xs font-semibold text-stone-500 hover:text-stone-700 px-2 py-1.5"
+                            >
+                              <X className="w-3 h-3" /> Cancel
+                            </button>
+                            <span className="text-[10px] text-stone-400">Esc to cancel</span>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <div
+                            className={`inline-block px-3 py-2 rounded-2xl text-sm whitespace-pre-wrap break-words text-left ${
+                              mine ? 'bg-[#EA580C] text-white' : 'bg-white text-stone-800 border border-stone-100'
+                            }`}
+                          >
+                            {m.text}
+                          </div>
 
-                      <div className={mine ? 'text-right' : ''}>
-                        <button
-                          onClick={() => setReplyTo(m)}
-                          className="mt-1 inline-flex items-center gap-1 text-[10px] font-semibold text-stone-400 hover:text-[#EA580C]"
-                        >
-                          <CornerUpLeft className="w-3 h-3" /> Reply
-                        </button>
-                      </div>
+                          <div className={`flex items-center gap-3 mt-1 ${mine ? 'justify-end' : ''}`}>
+                            {wasEdited(m) && (
+                              <span className="text-[10px] text-stone-400 italic">edited</span>
+                            )}
+                            <button
+                              onClick={() => setReplyTo(m)}
+                              className="inline-flex items-center gap-1 text-[10px] font-semibold text-stone-400 hover:text-[#EA580C]"
+                            >
+                              <CornerUpLeft className="w-3 h-3" /> Reply
+                            </button>
+                            {mine && (
+                              <button
+                                onClick={() => startEdit(m)}
+                                className="inline-flex items-center gap-1 text-[10px] font-semibold text-stone-400 hover:text-[#EA580C]"
+                              >
+                                <Pencil className="w-3 h-3" /> Edit
+                              </button>
+                            )}
+                          </div>
+                        </>
+                      )}
                     </div>
                   </div>
                 );
