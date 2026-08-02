@@ -21,6 +21,7 @@ import ChallengeDetail from '@/pages/ChallengeDetail';
 import Profile from '@/pages/Profile';
 import Mentors from '@/pages/Mentors';
 import SponsorDashboard from '@/pages/SponsorDashboard';
+import InstallPrompt from '@/components/InstallPrompt';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -80,6 +81,7 @@ function App() {
           <AuthenticatedApp />
         </Router>
         <Toaster />
+        <InstallPrompt />
       </QueryClientProvider>
     </AuthProvider>
   )

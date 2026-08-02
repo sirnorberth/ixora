@@ -2,11 +2,32 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/png" href="https://media.base44.com/images/public/6a5abdb1d0dcf842d7855043/731048ba3_image.png" />
-    <link rel="apple-touch-icon" href="https://media.base44.com/images/public/6a5abdb1d0dcf842d7855043/731048ba3_image.png" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link rel="manifest" href="/manifest.json" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+
     <title>Ixora — Orange Group</title>
+    <meta name="description" content="Manufacturing excellence at Orange Group: development goals, projects, challenges and mentorship." />
+
+    <!-- Icons (served from /public/icons) -->
+    <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+
+    <!-- PWA -->
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#EA580C" />
+
+    <!-- iOS standalone behaviour (Safari ignores the manifest for these) -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Ixora" />
+    <meta name="mobile-web-app-capable" content="yes" />
+
+    <!-- Link previews when the app is shared in chat or email -->
+    <meta property="og:title" content="Ixora — Orange Group" />
+    <meta property="og:description" content="Development goals, projects, challenges and mentorship." />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://orange-ixora.com" />
+    <meta property="og:image" content="https://orange-ixora.com/icons/icon-512.png" />
+    <meta name="twitter:card" content="summary" />
   </head>
   <body>
     <div id="root"></div>

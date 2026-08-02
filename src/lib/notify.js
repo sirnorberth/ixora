@@ -106,6 +106,41 @@ export async function notifyBottleneckCleared(bottleneck, project, milestones = 
   await createMany(targets.map((u) => ({ user: u.id, category: 'update', text, link: project ? `/projects/${project.id}` : '/projects' })));
 }
 
+// Someone nudged the function that owns a bottleneck. Reaches everyone in
+// the waiting-on department, plus the project lead and sponsor so they can
+// see the escalation.
+export async function notifyBottleneckNudge(bottleneck, project, nudger = null) {
+  const users = await getUsers();
+  const targets = uniqueTargets(
+    users.filter(
+      (u) =>
+        (bottleneck?.waiting_on && u.department === bottleneck.waiting_on) ||
+        u.id === project?.project_lead ||
+        u.id === project?.sponsor
+    ),
+    nudger?.id
+  );
+  if (!targets.length) return { notified: 0 };
+
+  const who = nameOf(nudger);
+  const link = project ? `/projects/${project.id}` : '/projects';
+
+  await createMany(
+    targets.map((u) => {
+      const inDept = bottleneck?.waiting_on && u.department === bottleneck.waiting_on;
+      return {
+        user: u.id,
+        category: 'task',
+        text: inDept
+          ? `${who} nudged ${bottleneck.waiting_on} about "${bottleneck?.title}" on ${project?.name || 'a project'}.`
+          : `${who} nudged ${bottleneck?.waiting_on || 'the owner'} about "${bottleneck?.title}" on ${project?.name || 'a project'}.`,
+        link,
+      };
+    })
+  );
+  return { notified: targets.length };
+}
+
 export async function notifyProjectDone(project, excludeUserId = null) {
   const users = await getUsers();
   const targets = uniqueTargets(
@@ -116,8 +151,9 @@ export async function notifyProjectDone(project, excludeUserId = null) {
   await createMany(targets.map((u) => ({ user: u.id, category: 'task', text, link: project ? `/projects/${project.id}` : '/projects' })));
 }
 
-// New chat message — tell every project participant except the sender
-export async function notifyProjectMessage(message, project, milestones = [], sender = null) {
+// New chat message — tell every project participant except the sender.
+// Whoever is being replied to gets a more direct 'task' notification.
+export async function notifyProjectMessage(message, project, milestones = [], sender = null, parentAuthorId = null) {
   const users = await getUsers();
   const fns = project?.functions_involved || [];
   const ownerIds = new Set((milestones || []).map((m) => m.owner).filter(Boolean));
@@ -127,16 +163,61 @@ export async function notifyProjectMessage(message, project, milestones = [], se
         u.id === project?.project_lead ||
         u.id === project?.sponsor ||
         u.id === project?.approver ||
+        u.id === parentAuthorId ||
         ownerIds.has(u.id) ||
         fns.includes(u.department)
     ),
     sender?.id
   );
+  if (!targets.length) return;
+
   const full = message?.text || '';
   const snippet = full.length > 80 ? `${full.slice(0, 80)}…` : full;
-  const text = `${nameOf(sender)} posted in ${project?.name || 'a project'}: "${snippet}"`;
+  const who = nameOf(sender);
+  const link = project ? `/projects/${project.id}` : '/projects';
+
   await createMany(
-    targets.map((u) => ({ user: u.id, category: 'update', text, link: project ? `/projects/${project.id}` : '/projects' }))
+    targets.map((u) => {
+      const isReplyTarget = parentAuthorId && u.id === parentAuthorId;
+      return {
+        user: u.id,
+        category: isReplyTarget ? 'task' : 'update',
+        text: isReplyTarget
+          ? `${who} replied to you in ${project?.name || 'a project'}: "${snippet}"`
+          : `${who} posted in ${project?.name || 'a project'}: "${snippet}"`,
+        link,
+      };
+    })
+  );
+}
+
+// A new project was created — tell the people attached to it
+export async function notifyProjectCreated(project, creator = null) {
+  const users = await getUsers();
+  const fns = project?.functions_involved || [];
+  const targets = uniqueTargets(
+    users.filter(
+      (u) =>
+        u.id === project?.project_lead ||
+        u.id === project?.sponsor ||
+        u.id === project?.approver ||
+        fns.includes(u.department)
+    ),
+    creator?.id
+  );
+  const who = creator ? nameOf(creator) : 'Someone';
+  await createMany(
+    targets.map((u) => {
+      const isApprover = u.id === project?.approver;
+      return {
+        user: u.id,
+        category: isApprover ? 'task' : 'update',
+        text: isApprover
+          ? `${who} created "${project?.name}" — your approval is needed.`
+          : `${who} created a new project: "${project?.name}".`,
+        link: project ? `/projects/${project.id}` : '/projects',
+      };
+    })
   );
 }
 

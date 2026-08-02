@@ -1,0 +1,54 @@
+{
+  "name": "Ixora — Orange Group",
+  "short_name": "Ixora",
+  "description": "Operation excellence: goals, projects, challenges and mentorship at Orange Group.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#FFF8F2",
+  "theme_color": "#EA580C",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-192-maskable.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/icon-512-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Projects",
+      "url": "/projects",
+      "description": "Open the projects list"
+    },
+    {
+      "name": "Challenges",
+      "url": "/challenges",
+      "description": "Browse open challenges"
+    },
+    {
+      "name": "My profile",
+      "url": "/profile",
+      "description": "Goals and profile"
+    }
+  ]
+}

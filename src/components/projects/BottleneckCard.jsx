@@ -3,10 +3,13 @@ import React, { useState } from 'react';
 import { AlertOctagon, Megaphone, Send, CheckCircle2, Check, Pencil } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
 import BottleneckFormDialog from './BottleneckFormDialog';
+import { notifyBottleneckNudge } from '@/lib/notify';
 import { daysSince, daysBetween, todayISODate } from '@/lib/dateUtils';
 
 export default function BottleneckCard({ bottleneck, project, currentUser, onPosted, onCleared, onUpdated }) {
   const [nudged, setNudged] = useState(false);
+  const [nudging, setNudging] = useState(false);
+  const [nudgeCount, setNudgeCount] = useState(0);
   const [localPosted, setLocalPosted] = useState(false);
   const [posting, setPosting] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -31,6 +34,21 @@ export default function BottleneckCard({ bottleneck, project, currentUser, onPos
   const canEdit =
     !!currentUser &&
     (currentUser.id === bottleneck.flagged_by || currentUser.id === project?.project_lead);
+
+  const handleNudge = async () => {
+    if (nudging) return;
+    setNudging(true);
+    try {
+      const result = await notifyBottleneckNudge(bottleneck, project, currentUser);
+      setNudgeCount(result?.notified || 0);
+      setNudged(true);
+      setTimeout(() => setNudged(false), 6000);
+    } catch (e) {
+      console.error('Nudge failed', e);
+    } finally {
+      setNudging(false);
+    }
+  };
 
   const handlePost = async () => {
     if (posting || !project) return;
@@ -116,10 +134,11 @@ export default function BottleneckCard({ bottleneck, project, currentUser, onPos
         {!cleared && (
           <>
             <button
-              onClick={() => setNudged(true)}
-              className="inline-flex items-center gap-1.5 text-sm font-semibold text-stone-700 bg-stone-100 hover:bg-stone-200 px-3 py-2 rounded-xl transition"
+              onClick={handleNudge}
+              disabled={nudging}
+              className="inline-flex items-center gap-1.5 text-sm font-semibold text-stone-700 bg-stone-100 hover:bg-stone-200 px-3 py-2 rounded-xl transition disabled:opacity-50"
             >
-              <Megaphone className="w-4 h-4" /> Nudge owner
+              <Megaphone className="w-4 h-4" /> {nudging ? 'Nudging…' : 'Nudge owner'}
             </button>
             {posted ? (
               <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-emerald-700 bg-emerald-50 px-3 py-2 rounded-xl">
@@ -158,7 +177,9 @@ export default function BottleneckCard({ bottleneck, project, currentUser, onPos
 
       {nudged && (
         <p className="mt-3 text-xs font-medium text-emerald-700 bg-emerald-50 rounded-lg px-3 py-2">
-          {bottleneck.waiting_on || 'Owner'} nudged — visible on the project feed
+          {nudgeCount > 0
+            ? `${bottleneck.waiting_on || 'Owner'} nudged — ${nudgeCount} ${nudgeCount === 1 ? 'person was' : 'people were'} notified.`
+            : `No one in ${bottleneck.waiting_on || 'that function'} to notify yet — check their department is set.`}
         </p>
       )}
 
