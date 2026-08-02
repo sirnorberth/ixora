@@ -20,6 +20,7 @@ import Challenges from '@/pages/Challenges';
 import ChallengeDetail from '@/pages/ChallengeDetail';
 import Profile from '@/pages/Profile';
 import Mentors from '@/pages/Mentors';
+import Team from '@/pages/Team';
 import SponsorDashboard from '@/pages/SponsorDashboard';
 import InstallPrompt from '@/components/InstallPrompt';
 
@@ -63,6 +64,7 @@ const AuthenticatedApp = () => {
         <Route path="/challenges/:id" element={<ChallengeDetail />} />
         <Route path="/profile" element={<Profile />} />
         <Route path="/mentors" element={<Mentors />} />
+        <Route path="/team" element={<Team />} />
         <Route path="/sponsor" element={<SponsorDashboard />} />
       </Route>
       <Route path="*" element={<PageNotFound />} />
