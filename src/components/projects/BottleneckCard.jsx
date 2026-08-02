@@ -29,11 +29,21 @@ export default function BottleneckCard({ bottleneck, project, currentUser, onPos
       currentUser.id === project?.project_lead ||
       currentUser.id === project?.sponsor);
 
-  // Editing is deliberately narrow: only the person who flagged it (to fix
-  // their own mistake) and the project lead (to keep the record accurate).
+  // Whoever flagged it, the project lead, and anyone in the department the
+  // bottleneck is waiting on — so the team can clear it without the flagger.
+  const inOwningDept =
+    !!currentUser &&
+    !!bottleneck.waiting_on &&
+    currentUser.department === bottleneck.waiting_on;
+
   const canEdit =
     !!currentUser &&
-    (currentUser.id === bottleneck.flagged_by || currentUser.id === project?.project_lead);
+    (currentUser.id === bottleneck.flagged_by ||
+      currentUser.id === project?.project_lead ||
+      inOwningDept);
+
+  // The same group may mark it cleared
+  const canClear = canEdit;
 
   const handleNudge = async () => {
     if (nudging) return;
@@ -153,7 +163,7 @@ export default function BottleneckCard({ bottleneck, project, currentUser, onPos
                 <Send className="w-4 h-4" /> {posting ? 'Posting…' : 'Post as challenge'}
               </button>
             ) : null}
-            {canManage && (
+            {canClear && (
               <button
                 onClick={handleClear}
                 className="inline-flex items-center gap-1.5 text-sm font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-3 py-2 rounded-xl transition"

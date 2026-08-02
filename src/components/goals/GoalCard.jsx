@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Pencil, Archive, ArchiveRestore, Trash2, Target, Calendar, Eye } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
+import { base44 } from '@/api/base44Client';
 import GoalProgressTracker from './GoalProgressTracker';
+import GoalTaskList from './GoalTaskList';
 import { fmtDate } from '@/lib/dateUtils';
 
 export default function GoalCard({
@@ -14,9 +16,24 @@ export default function GoalCard({
   onArchive,
   onDelete,
   onToggleVisibility,
-  onUpdateLessons,
 }) {
   const archived = !!goal.archived;
+  const [tasks, setTasks] = useState([]);
+
+  // Each card owns its own task list, so nothing else needs to know about them
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const rows = await base44.entities.GoalTask.filter({ goal: goal.id }, 'position', 100);
+        if (alive) setTasks(rows);
+      } catch (e) {
+        console.error('Could not load goal tasks', e);
+      }
+    })();
+    return () => { alive = false; };
+  }, [goal.id]);
+
   return (
     <div className={`bg-white rounded-2xl border border-stone-100 shadow-sm p-4 ${archived ? 'opacity-70' : ''}`}>
       <div className="flex items-start justify-between gap-2">
@@ -59,11 +76,20 @@ export default function GoalCard({
       <div className="mt-4">
         <GoalProgressTracker
           goal={goal}
+          tasks={tasks}
           applications={applications}
           challenges={challenges}
           mentorMatches={mentorMatches}
           currentUser={currentUser}
-          onUpdateLessons={onUpdateLessons}
+        />
+      </div>
+
+      <div className="mt-4 pt-3 border-t border-stone-100">
+        <GoalTaskList
+          goal={goal}
+          tasks={tasks}
+          onChange={setTasks}
+          readOnly={archived}
         />
       </div>
 

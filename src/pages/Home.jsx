@@ -7,7 +7,7 @@ import ProjectsAtAGlance from '@/components/home/ProjectsAtAGlance';
 import LoopCard from '@/components/home/LoopCard';
 import WelcomeNote from '@/components/home/WelcomeNote';
 import NotificationBell from '@/components/NotificationBell';
-import { Target, Calendar } from 'lucide-react';
+import { Target, Calendar, Users } from 'lucide-react';
 import { fmtDate } from '@/lib/dateUtils';
 
 function IxoraFlower() {
@@ -58,17 +58,20 @@ function IxoraFlower() {
 export default function Home() {
   const [currentUser, setCurrentUser] = useState(null);
   const [goals, setGoals] = useState([]);
+  const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     (async () => {
       try {
-        const [me, gs] = await Promise.all([
+        const [me, gs, ps] = await Promise.all([
           base44.auth.me().catch(() => null),
           base44.entities.Goal.list('-created_date', 50).catch(() => []),
+          base44.entities.Project.list('-created_date', 200).catch(() => []),
         ]);
         setCurrentUser(me);
         setGoals(gs);
+        setProjects(ps);
       } catch (e) {
         console.error(e);
       } finally {
@@ -85,7 +88,14 @@ export default function Home() {
   const myActiveGoals = goals.filter((g) => g.user === currentUser?.id && !g.archived);
   const hasActiveGoal = myActiveGoals.length > 0;
   const latestGoal = myActiveGoals[0];
-  const isSponsor = currentUser?.role === 'Sponsor';
+
+  // Roles are Employee / Manager / Director. Show the oversight dashboard link
+  // to Managers, Directors, and anyone sponsoring at least one project —
+  // this must match the access rule inside SponsorDashboard.jsx.
+  const sponsorsAProject = !!currentUser && projects.some((p) => p.sponsor === currentUser.id);
+  const canSeeDashboard =
+    !!currentUser &&
+    (currentUser.role === 'Director' || currentUser.role === 'Manager' || sponsorsAProject);
 
   return (
     <div className="min-h-[100dvh] bg-[#FFF8F2] flex flex-col items-center px-6 py-10 text-center">
@@ -116,7 +126,13 @@ export default function Home() {
         >
           Find a mentor
         </Link>
-        {isSponsor && (
+        <Link
+          to="/team"
+          className="inline-flex items-center gap-2 bg-white text-[#EA580C] font-semibold px-6 py-3 rounded-2xl shadow-sm border border-orange-200 hover:bg-orange-50 active:scale-95 transition"
+        >
+          <Users className="w-4 h-4" /> Team
+        </Link>
+        {canSeeDashboard && (
           <Link
             to="/sponsor"
             className="inline-flex items-center gap-2 bg-stone-900 text-white font-semibold px-6 py-3 rounded-2xl shadow-sm hover:bg-stone-800 active:scale-95 transition"

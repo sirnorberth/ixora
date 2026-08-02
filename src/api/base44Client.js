@@ -24,6 +24,7 @@ const TABLE_MAP = {
   Notification: 'notifications',
   ResistanceLog: 'resistance_logs',
   ProjectMessage: 'project_messages',
+  GoalTask: 'goal_tasks',
 };
 
 function tableFor(entityName) {

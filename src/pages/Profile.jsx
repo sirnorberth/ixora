@@ -6,6 +6,7 @@ import SetGoalCard from '@/components/goals/SetGoalCard';
 import GoalCard from '@/components/goals/GoalCard';
 import GoalFormDialog from '@/components/goals/GoalFormDialog';
 import AppHeader from '@/components/AppHeader';
+import AvatarUpload from '@/components/AvatarUpload';
 
 export default function Profile() {
   const navigate = useNavigate();
@@ -98,7 +99,6 @@ export default function Profile() {
     onArchive: () => handleArchive(g),
     onDelete: () => handleDelete(g),
     onToggleVisibility: (val) => handleToggleVisibility(g, val),
-    onUpdateLessons: (val) => handleUpdateLessons(g, val),
   });
 
   if (loading) {
@@ -125,11 +125,12 @@ export default function Profile() {
       <main className="max-w-3xl mx-auto px-4 py-5 space-y-5">
         <h2 className="text-xl font-bold text-stone-800 px-1">Profile</h2>
         <section className="bg-white rounded-2xl border border-stone-100 shadow-sm p-4">
-          <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-full bg-orange-100 flex items-center justify-center text-[#EA580C] font-bold text-lg">
-              {(currentUser?.full_name || currentUser?.email || '?').charAt(0).toUpperCase()}
-            </div>
-            <div className="min-w-0">
+          <div className="flex items-start gap-4">
+            <AvatarUpload
+              currentUser={currentUser}
+              onUpdated={(url) => setCurrentUser((u) => (u ? { ...u, avatar_url: url } : u))}
+            />
+            <div className="min-w-0 pt-1">
               <div className="font-semibold text-stone-800 truncate">
                 {currentUser?.full_name || currentUser?.email || '—'}
               </div>
