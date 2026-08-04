@@ -31,6 +31,9 @@ export default function Projects() {
   const [milestones, setMilestones] = useState([]);
   const [bottlenecks, setBottlenecks] = useState([]);
   const [users, setUsers] = useState([]);
+  const [challenges, setChallenges] = useState([]);
+  const [applications, setApplications] = useState([]);
+  const [goals, setGoals] = useState([]);
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [order, setOrder] = useState([]);
@@ -41,18 +44,24 @@ export default function Projects() {
   useEffect(() => {
     (async () => {
       try {
-        const [p, m, b, us, me] = await Promise.all([
+        const [p, m, b, us, me, chs, apps, gs] = await Promise.all([
           base44.entities.Project.list('-created_date', 200),
           base44.entities.Milestone.list('-created_date', 1000),
           base44.entities.Bottleneck.list('-created_date', 1000),
           base44.entities.User.list(),
           base44.auth.me().catch(() => null),
+          base44.entities.Challenge.list('-created_date', 300).catch(() => []),
+          base44.entities.Application.list('-created_date', 1000).catch(() => []),
+          base44.entities.Goal.list('-created_date', 300).catch(() => []),
         ]);
         setProjects(p);
         setMilestones(m);
         setBottlenecks(b);
         setUsers(us);
         setCurrentUser(me);
+        setChallenges(chs);
+        setApplications(apps);
+        setGoals(gs);
         let saved = [];
         try {
           saved = JSON.parse(localStorage.getItem(orderKey(me?.id)) || '[]');
@@ -142,26 +151,121 @@ export default function Projects() {
     if (!currentUser) return;
     setNotifying(true);
     try {
-      const byProject = {};
-      myTasks.forEach((m) => {
-        byProject[m.project] = (byProject[m.project] || 0) + 1;
-      });
-      const lines = Object.entries(byProject).map(([pid, n]) => {
-        const p = projects.find((x) => x.id === pid);
-        return `- ${p?.name || 'Project'}: ${n} task(s)`;
-      });
-      const body = myTasks.length
-        ? `You have ${myTasks.length} open task(s) matching your function/role:\n\n${lines.join('\n')}\n\nOpen Ixora to view them.`
-        : 'You have no open tasks matching your function/role right now.';
+      const nameOfProject = (pid) => projects.find((x) => x.id === pid)?.name || 'Project';
+      const lines = [];
+
+      // ---- A. Tasks for me / my function ----
+      lines.push('YOUR OPEN TASKS');
+      if (myTasks.length) {
+        const byProject = {};
+        myTasks.forEach((m) => {
+          (byProject[m.project] = byProject[m.project] || []).push(m);
+        });
+        Object.entries(byProject).forEach(([pid, ms]) => {
+          lines.push(`${nameOfProject(pid)} — ${ms.length} task(s):`);
+          ms.forEach((m) => {
+            const due = m.due_date ? ` (due ${m.due_date})` : '';
+            lines.push(`   • ${m.title} — ${m.status}${due}`);
+          });
+        });
+      } else {
+        lines.push('No open tasks match your function or role right now.');
+      }
+
+      // ---- B. General update ----
+      // Projects I'm attached to
+      const myProjects = projects.filter(
+        (p) =>
+          p.project_lead === currentUser.id ||
+          p.sponsor === currentUser.id ||
+          p.approver === currentUser.id ||
+          (p.functions_involved || []).includes(currentUser.department)
+      );
+      lines.push('');
+      lines.push('YOUR PROJECTS');
+      if (myProjects.length) {
+        myProjects.forEach((p) => {
+          const ms = milestones.filter((m) => m.project === p.id);
+          const done = ms.filter((m) => m.status === 'Done').length;
+          const openBlockers = bottlenecks.filter((b) => b.project === p.id && b.status === 'Open').length;
+          const role =
+            p.project_lead === currentUser.id ? 'lead'
+            : p.sponsor === currentUser.id ? 'sponsor'
+            : p.approver === currentUser.id ? 'approver'
+            : 'your function';
+          lines.push(
+            `   • ${p.name} — ${p.status || 'Not Started'}, ${p.health_status || 'On track'}` +
+            (ms.length ? `, ${done}/${ms.length} milestones done` : '') +
+            (openBlockers ? `, ${openBlockers} open blocker(s)` : '') +
+            ` [${role}]`
+          );
+        });
+      } else {
+        lines.push('   You are not attached to any project yet.');
+      }
+
+      // Awaiting my approval
+      const awaitingMe = projects.filter(
+        (p) => p.approver === currentUser.id && p.approval_status === 'Pending'
+      );
+      if (awaitingMe.length) {
+        lines.push('');
+        lines.push('AWAITING YOUR APPROVAL');
+        awaitingMe.forEach((p) => lines.push(`   • ${p.name}`));
+      }
+
+      // Challenges I applied to or sponsor
+      const myApps = applications.filter((a) => a.user === currentUser.id);
+      const mySponsored = challenges.filter((c) => c.sponsor === currentUser.id && !c.archived);
+      lines.push('');
+      lines.push('YOUR CHALLENGES');
+      if (myApps.length || mySponsored.length) {
+        myApps.forEach((a) => {
+          const c = challenges.find((x) => x.id === a.challenge);
+          if (c) lines.push(`   • ${c.title} — application ${a.status || 'Applied'}, challenge ${c.status || 'Open'}`);
+        });
+        mySponsored.forEach((c) => {
+          const count = applications.filter((a) => a.challenge === c.id).length;
+          lines.push(`   • ${c.title} (you sponsor) — ${c.status || 'Open'}, ${count} applicant(s)`);
+        });
+      } else {
+        lines.push('   No challenges yet — browse the challenges page to join one.');
+      }
+
+      // Goals and their tasks
+      const myGoals = goals.filter((g) => g.user === currentUser.id && !g.archived);
+      lines.push('');
+      lines.push('YOUR GOAL');
+      if (myGoals.length) {
+        for (const g of myGoals) {
+          let gTasks = [];
+          try {
+            gTasks = await base44.entities.GoalTask.filter({ goal: g.id }, 'position', 100);
+          } catch {
+            gTasks = [];
+          }
+          const done = gTasks.filter((t) => t.done).length;
+          const pct = gTasks.length ? Math.round((done / gTasks.length) * 100) : 0;
+          lines.push(`   • ${g.goal_text}`);
+          lines.push(
+            `     Target ${g.target_date || '—'} · ` +
+            (gTasks.length ? `${done}/${gTasks.length} tasks done (${pct}%)` : 'no tasks added yet')
+          );
+          gTasks.filter((t) => !t.done).slice(0, 5).forEach((t) => {
+            lines.push(`        ◦ ${t.title}`);
+          });
+        }
+      } else {
+        lines.push('   No active goal — set one on your profile to get matched to challenges.');
+      }
+
       await base44.integrations.Core.SendEmail({
         to: currentUser.email,
-        subject: `Ixora — ${myTasks.length} task(s) need your attention`,
-        body,
+        subject: `Ixora update — ${myTasks.length} task(s) need your attention`,
+        body: lines.join('\n'),
       });
     } catch (e) {
       console.error(e);
-      // Re-throw so the banner can show a real failure instead of
-      // claiming the email was sent.
       throw e;
     } finally {
       setNotifying(false);

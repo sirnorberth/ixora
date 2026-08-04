@@ -1,7 +1,9 @@
+// ChallengeCard.jsx
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { Archive } from 'lucide-react';
 import { CHALLENGE_TYPE_STYLES } from '@/lib/constants';
+import ChallengeStatusBadge from './ChallengeStatusBadge';
 
 export default function ChallengeCard({ challenge, applicantsCount = 0, matchesGoal = false }) {
   const ts = CHALLENGE_TYPE_STYLES[challenge.type] || { bg: 'bg-stone-100', text: 'text-stone-600' };
@@ -11,6 +13,7 @@ export default function ChallengeCard({ challenge, applicantsCount = 0, matchesG
       className={`block bg-white rounded-2xl border border-stone-100 shadow-sm p-4 hover:shadow-md hover:border-orange-200 transition ${challenge.archived ? 'opacity-60' : ''}`}
     >
       <div className="flex flex-wrap items-center gap-1.5">
+        <ChallengeStatusBadge status={challenge.status} />
         {challenge.type && (
           <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${ts.bg} ${ts.text}`}>{challenge.type}</span>
         )}

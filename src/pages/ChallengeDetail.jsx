@@ -1,8 +1,11 @@
+// ChallengeDetail.jsx
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { base44 } from '@/api/base44Client';
 import { Clock, Sparkles, CheckCircle2, Pencil, Archive, ArchiveRestore, Check, X } from 'lucide-react';
-import { CHALLENGE_TYPE_STYLES } from '@/lib/constants';
+import { CHALLENGE_TYPE_STYLES, CHALLENGE_STATUSES } from '@/lib/constants';
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
+import ChallengeStatusBadge from '@/components/challenges/ChallengeStatusBadge';
 import ApplicantsList from '@/components/challenges/ApplicantsList';
 import ChallengeFormDialog from '@/components/challenges/ChallengeFormDialog';
 import AppHeader from '@/components/AppHeader';
@@ -20,6 +23,7 @@ export default function ChallengeDetail() {
   const [applied, setApplied] = useState(false);
   const [applying, setApplying] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [savingStatus, setSavingStatus] = useState(false);
 
   const refresh = async () => {
     const [c, apps, g, us, me] = await Promise.all([
@@ -72,7 +76,10 @@ export default function ChallengeDetail() {
   const matchesGoal = (challenge.skill_tags || []).some((t) => myGoalTags.has(t));
 
   const isChallengeSponsor = currentUser?.id === challenge.sponsor;
-  const canManage = currentUser?.role === 'Sponsor' || isChallengeSponsor;
+  // Roles are Employee / Manager / Director
+  const canManage =
+    currentUser?.role === 'Director' || currentUser?.role === 'Manager' || isChallengeSponsor;
+  const acceptedCount = applications.filter((a) => a.status === 'Accepted').length;
   const hasPending = challenge.pending_edit && Object.keys(challenge.pending_edit).length > 0;
   const pendingByMe = hasPending && challenge.pending_edit_by === currentUser?.id;
   const pendingByName = (() => {
@@ -123,18 +130,36 @@ export default function ChallengeDetail() {
 
   const handleApproveEdit = async () => {
     const pe = challenge.pending_edit || {};
-    await base44.entities.Challenge.update(id, { ...pe, pending_edit: {}, pending_edit_by: '', pending_edit_date: '' });
+    await base44.entities.Challenge.update(id, { ...pe, pending_edit: null, pending_edit_by: null, pending_edit_date: null });
     await refresh();
   };
 
   const handleRejectEdit = async () => {
-    await base44.entities.Challenge.update(id, { pending_edit: {}, pending_edit_by: '', pending_edit_date: '' });
+    await base44.entities.Challenge.update(id, { pending_edit: null, pending_edit_by: null, pending_edit_date: null });
     await refresh();
   };
 
   const handleArchive = async (val) => {
     await base44.entities.Challenge.update(id, { archived: val });
     await refresh();
+  };
+
+  // Marking a challenge Done archives it automatically; moving it back off
+  // Done un-archives it so the team can carry on.
+  const handleStatusChange = async (status) => {
+    if (status === challenge.status || savingStatus) return;
+    setSavingStatus(true);
+    try {
+      const patch = { status };
+      if (status === 'Done') patch.archived = true;
+      else if (challenge.status === 'Done') patch.archived = false;
+      await base44.entities.Challenge.update(id, patch);
+      await refresh();
+    } catch (e) {
+      console.error('Could not update challenge status', e);
+    } finally {
+      setSavingStatus(false);
+    }
   };
 
   const pe = challenge.pending_edit || {};
@@ -166,6 +191,7 @@ export default function ChallengeDetail() {
         <section className="bg-white rounded-2xl border border-stone-100 shadow-sm p-4">
           <div className="flex flex-wrap items-center gap-1.5">
             <Sparkles className="w-4 h-4 text-[#EA580C]" />
+            <ChallengeStatusBadge status={challenge.status} />
             {challenge.type && (
               <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${ts.bg} ${ts.text}`}>{challenge.type}</span>
             )}
@@ -204,9 +230,46 @@ export default function ChallengeDetail() {
             </div>
           )}
 
+          {canManage && (
+            <div className="mt-4 pt-3 border-t border-stone-100">
+              <label className="text-xs font-semibold text-stone-500 uppercase tracking-wide">
+                Challenge status
+              </label>
+              <div className="mt-1.5 max-w-xs">
+                <Select
+                  value={challenge.status || 'Open'}
+                  onValueChange={handleStatusChange}
+                  disabled={savingStatus}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Set status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CHALLENGE_STATUSES.map((st) => (
+                      <SelectItem key={st} value={st}>{st}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <p className="mt-1.5 text-[11px] text-stone-400">
+                Marking a challenge <span className="font-semibold">Done</span> archives it automatically.
+              </p>
+            </div>
+          )}
+
+          {acceptedCount > 0 && (
+            <p className="mt-3 text-sm font-medium text-emerald-700 bg-emerald-50 rounded-lg px-3 py-2">
+              Team formed — {acceptedCount} {acceptedCount === 1 ? 'person is' : 'people are'} on this challenge.
+            </p>
+          )}
+
           <div className="mt-4">
             {challenge.archived ? (
-              <p className="text-sm font-medium text-stone-500 bg-stone-100 rounded-2xl px-4 py-3">This challenge has been archived.</p>
+              <p className="text-sm font-medium text-stone-500 bg-stone-100 rounded-2xl px-4 py-3">
+                {challenge.status === 'Done'
+                  ? 'This challenge is done and has been archived.'
+                  : 'This challenge has been archived.'}
+              </p>
             ) : applied ? (
               <div className="inline-flex items-center gap-2 text-sm font-semibold text-white bg-emerald-600 px-5 py-3 rounded-2xl">
                 <CheckCircle2 className="w-5 h-5" /> Applied — your line manager has been informed.
