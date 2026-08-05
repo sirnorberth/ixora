@@ -23,6 +23,7 @@ import Mentors from '@/pages/Mentors';
 import Team from '@/pages/Team';
 import SponsorDashboard from '@/pages/SponsorDashboard';
 import InstallPrompt from '@/components/InstallPrompt';
+import BottomNav from '@/components/BottomNav';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -80,7 +81,11 @@ function App() {
       <QueryClientProvider client={queryClientInstance}>
         <Router>
           <ScrollToTop />
-          <AuthenticatedApp />
+          {/* Room for the fixed bottom bar on phones; none on desktop */}
+          <div className="pb-[calc(60px+env(safe-area-inset-bottom,0px))] sm:pb-0">
+            <AuthenticatedApp />
+          </div>
+          <BottomNav />
         </Router>
         <Toaster />
         <InstallPrompt />
