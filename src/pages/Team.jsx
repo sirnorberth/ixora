@@ -23,8 +23,8 @@ const ROLE_STYLES = {
 function PersonCard({ user }) {
   const name = user.full_name || user.email || 'Unnamed';
   return (
-    <div className="bg-white rounded-2xl border border-stone-100 shadow-sm p-4 hover:shadow-md hover:border-orange-200 transition">
-      <div className="flex items-start gap-3">
+    <div className="w-full min-w-0 bg-white rounded-2xl border border-stone-100 shadow-sm p-4 hover:shadow-md hover:border-orange-200 transition">
+      <div className="flex items-start gap-3 min-w-0">
         {user.avatar_url ? (
           <img
             src={user.avatar_url}
@@ -37,8 +37,8 @@ function PersonCard({ user }) {
           </div>
         )}
         <div className="min-w-0 flex-1">
-          <div className="flex items-start justify-between gap-2">
-            <h3 className="font-semibold text-stone-800 truncate">{name}</h3>
+          <div className="flex items-start justify-between gap-2 min-w-0">
+            <h3 className="font-semibold text-stone-800 truncate min-w-0">{name}</h3>
             {user.role && (
               <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${ROLE_STYLES[user.role] || ROLE_STYLES.Employee}`}>
                 {user.role}
@@ -46,15 +46,16 @@ function PersonCard({ user }) {
             )}
           </div>
           {user.job_title && (
-            <p className="mt-0.5 text-sm text-stone-600 truncate flex items-center gap-1.5">
+            <p className="mt-0.5 text-sm text-stone-600 flex items-center gap-1.5 min-w-0">
               <Briefcase className="w-3.5 h-3.5 text-stone-400 shrink-0" />
-              {user.job_title}
+              <span className="truncate">{user.job_title}</span>
             </p>
           )}
-          <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-xs text-stone-500">
+          <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-xs text-stone-500 min-w-0">
             {user.department && (
-              <span className="inline-flex items-center gap-1">
-                <Building2 className="w-3 h-3" /> {user.department}
+              <span className="inline-flex items-center gap-1 min-w-0 max-w-full">
+                <Building2 className="w-3 h-3 shrink-0" />
+                <span className="truncate">{user.department}</span>
               </span>
             )}
             {user.years_of_experience != null && (
@@ -116,10 +117,10 @@ export default function Team() {
   }, [users]);
 
   return (
-    <div className="min-h-[100dvh] bg-[#FFF8F2]">
+    <div className="min-h-[100dvh] bg-[#FFF8F2] overflow-x-hidden">
       <AppHeader />
 
-      <main className="max-w-3xl mx-auto px-4 py-5 space-y-5">
+      <main className="w-full max-w-3xl mx-auto px-4 py-5 space-y-5">
         <div className="px-1">
           <h2 className="text-xl font-bold text-stone-800 flex items-center gap-2">
             <Users className="w-5 h-5 text-[#EA580C]" /> Team
@@ -139,13 +140,13 @@ export default function Team() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search by name, job title or function…"
-            className="w-full h-11 pl-10 pr-3 rounded-xl border border-stone-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-200 focus:border-[#EA580C]"
+            className="w-full max-w-full h-11 pl-10 pr-3 rounded-xl border border-stone-200 bg-white text-sm box-border focus:outline-none focus:ring-2 focus:ring-orange-200 focus:border-[#EA580C]"
           />
         </div>
 
         {/* Department filter */}
         {activeDepts.length > 0 && (
-          <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1">
+          <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-4 px-4 min-w-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             <button
               onClick={() => setDept('All')}
               className={`shrink-0 text-xs font-semibold px-3 py-1.5 rounded-full border transition ${
@@ -185,7 +186,7 @@ export default function Team() {
             </p>
           </div>
         ) : (
-          <div className="grid sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {filtered.map((u) => (
               <PersonCard key={u.id} user={u} />
             ))}

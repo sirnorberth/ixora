@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { base44 } from '@/api/base44Client';
-import { Plus, Eye, EyeOff, LogOut } from 'lucide-react';
+import { Plus, Eye, EyeOff, LogOut, Target } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import SetGoalCard from '@/components/goals/SetGoalCard';
 import GoalCard from '@/components/goals/GoalCard';
@@ -174,6 +174,18 @@ export default function Profile() {
             </div>
           )}
         </section>
+
+        <div className="flex items-center justify-between px-1 pt-1">
+          <h3 className="text-lg font-bold text-stone-800 inline-flex items-center gap-2">
+            <Target className="w-5 h-5 text-[#EA580C]" />
+            Goals
+          </h3>
+          {activeGoals.length > 0 && (
+            <span className="text-xs text-stone-400">
+              {activeGoals.length} active
+            </span>
+          )}
+        </div>
 
         {activeGoals.length === 0 ? (
           <SetGoalCard currentUser={currentUser} onComplete={refresh} />
