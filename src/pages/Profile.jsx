@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { base44 } from '@/api/base44Client';
-import { Plus, Eye, EyeOff } from 'lucide-react';
+import { Plus, Eye, EyeOff, LogOut } from 'lucide-react';
+import { useAuth } from '@/lib/AuthContext';
 import SetGoalCard from '@/components/goals/SetGoalCard';
 import GoalCard from '@/components/goals/GoalCard';
 import GoalFormDialog from '@/components/goals/GoalFormDialog';
@@ -19,6 +20,8 @@ export default function Profile() {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [showArchived, setShowArchived] = useState(false);
+  const [confirmLogout, setConfirmLogout] = useState(false);
+  const { logout } = useAuth();
 
   const refresh = async () => {
     const [me, gs, apps, chs, mm] = await Promise.all([
@@ -200,6 +203,40 @@ export default function Profile() {
             )}
           </section>
         )}
+        {/* Account */}
+        <section className="pt-2 pb-2">
+          {confirmLogout ? (
+            <div className="bg-white rounded-2xl border border-stone-100 shadow-sm p-4">
+              <p className="text-sm text-stone-700">Log out of Ixora on this device?</p>
+              <div className="mt-3 flex gap-2">
+                <button
+                  onClick={() => logout()}
+                  className="flex-1 inline-flex items-center justify-center gap-1.5 text-sm font-semibold text-white bg-red-600 hover:bg-red-700 px-3 py-2.5 rounded-xl transition"
+                >
+                  <LogOut className="w-4 h-4" /> Log out
+                </button>
+                <button
+                  onClick={() => setConfirmLogout(false)}
+                  className="flex-1 text-sm font-semibold text-stone-600 bg-stone-100 hover:bg-stone-200 px-3 py-2.5 rounded-xl transition"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={() => setConfirmLogout(true)}
+              className="w-full inline-flex items-center justify-center gap-2 text-sm font-semibold text-stone-600 bg-white border border-stone-200 hover:border-red-200 hover:text-red-600 px-3 py-3 rounded-2xl transition"
+            >
+              <LogOut className="w-4 h-4" /> Log out
+            </button>
+          )}
+          {currentUser?.email && (
+            <p className="mt-2 text-center text-[11px] text-stone-400">
+              Signed in as {currentUser.email}
+            </p>
+          )}
+        </section>
       </main>
 
       <GoalFormDialog
